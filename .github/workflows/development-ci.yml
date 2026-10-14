@@ -1,0 +1,107 @@
+name: Development validation
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        required: true
+        type: string
+      head_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      head: ${{ steps.resolve.outputs.head }}
+      base: ${{ steps.resolve.outputs.base }}
+      number: ${{ steps.resolve.outputs.number }}
+      codex: ${{ steps.resolve.outputs.codex }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || inputs.head_sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFile } from 'node:fs/promises'
+          const api = async path => {
+            const r=await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}${path}`,{headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,Accept:'application/vnd.github+json'}})
+            if(!r.ok) throw Error(`GitHub request failed: ${r.status}`)
+            return r.json()
+          }
+          const n = Number(process.env.PR_NUMBER)
+          if (!Number.isSafeInteger(n) || n < 1) throw Error('Invalid PR')
+          const pr = await api(`/pulls/${n}`)
+          if (pr.head.repo.full_name !== process.env.GITHUB_REPOSITORY || pr.base.ref !== 'main' || pr.head.sha !== process.env.EXPECTED_SHA) throw Error('Unexpected PR target or outdated commit')
+          await appendFile(process.env.GITHUB_OUTPUT,`head=${pr.head.sha}\nbase=${pr.base.sha}\nnumber=${n}\ncodex=${pr.head.ref.startsWith('codex/request-')}\n`)
+          JS
+  test:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.resolve.outputs.head }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test proposed merge with current main
+        env:
+          BASE_SHA: ${{ needs.resolve.outputs.base }}
+        run: |
+          git config user.name 'Development validation'
+          git config user.email 'development-validation@users.noreply.github.com'
+          git -c core.hooksPath=/dev/null merge --no-edit "$BASE_SHA"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+  record:
+    needs: [resolve, test]
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.resolve.outputs.base }}
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head }}
+          BASE_SHA: ${{ needs.resolve.outputs.base }}
+          PR_NUMBER: ${{ needs.resolve.outputs.number }}
+          TEST_RESULT: ${{ needs.test.result }}
+          AUTO_MERGE: ${{ needs.resolve.outputs.codex }}
+        run: |
+          node --input-type=module <<'JS'
+          const api = async (path,method,body) => {
+            const r=await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}${path}`,{method,headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,Accept:'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify(body)})
+            if(!r.ok) throw Error(`GitHub request failed: ${r.status}`)
+            return r.status===204 ? undefined : r.json()
+          }
+          const success = process.env.TEST_RESULT === 'success'
+          await api('/check-runs','POST',{name:'Development CI',head_sha:process.env.HEAD_SHA,status:'completed',conclusion:success?'success':'failure',output:{title:success?'Validation passed':'Validation failed',summary:`base:${process.env.BASE_SHA}\nTypeScript, tests, and production build against the proposed merge.`}})
+          if (success && process.env.AUTO_MERGE === 'true') await api('/actions/workflows/approve-and-merge.yml/dispatches','POST',{ref:'main',inputs:{pr_number:process.env.PR_NUMBER}})
+          JS

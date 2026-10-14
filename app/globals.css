@@ -371,3 +371,26 @@ button.primary,
   animation: spin 1s linear infinite;
   filter: invert(1);
 }
+
+/* Authenticated development request panel */
+.change-request-trigger { position: fixed; right: 24px; bottom: 24px; display: flex; gap: 10px; align-items: center; background: #166534; color: white; border: 0; border-radius: 28px; padding: 14px 20px; box-shadow: 0 8px 28px #0003; z-index: 40; cursor: pointer; }
+.change-request-panel { position: fixed; right: 24px; bottom: 90px; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 120px); overflow: auto; background: var(--custom-panel-color, #222); color: var(--custom-color, #fff); border: 1px solid #8885; border-radius: 18px; padding: 24px; box-shadow: 0 16px 60px #0003; z-index: 40; }
+.change-request-header, .change-request-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.change-request-header h2 { font-size: 22px; margin: 4px 0 0; }
+.change-request-eyebrow { font-size: 11px; letter-spacing: .15em; color: #15803d; font-weight: 700; }
+.change-request-panel p { font-size: 14px; line-height: 1.6; }
+.change-request-panel label { display: block; margin: 16px 0 6px; font-weight: 600; font-size: 13px; }
+.change-request-panel input, .change-request-panel textarea { display: block; width: 100%; box-sizing: border-box; padding: 10px 12px; background: transparent; color: inherit; border: 1px solid #8888; border-radius: 8px; font: inherit; }
+.change-request-panel small { display: block; margin: 10px 0 14px; font-size: 12px; opacity: .75; }
+.change-request-panel button { cursor: pointer; }
+.change-request-header button { background: transparent; color: inherit; border: 0; font-size: 28px; }
+.change-request-list { list-style: none; margin: 0; padding: 0; }
+.change-request-list li { padding: 14px 0; border-top: 1px solid #8884; }
+.change-request-list strong { display: block; font-size: 14px; }
+.change-request-status { display: block; font-size: 12px; opacity: .75; margin: 6px 0; }
+.change-request-links { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+.change-request-error { color: #dc2626; }
+.change-request-success { color: #15803d; }
+.release-notice { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 12px 18px; border-radius: 10px; background: #166534; color: white; box-shadow: 0 4px 20px #0002; z-index: 50; width: max-content; max-width: 90vw; }
+.release-notice button { background: transparent; color: white; text-decoration: underline; border: 0; cursor: pointer; }
+@media (max-width: 600px) { .change-request-panel { right: 16px; bottom: 84px; padding: 18px; } .change-request-trigger { right: 16px; bottom: 16px; } }

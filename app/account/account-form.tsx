@@ -6,7 +6,8 @@ import Avatar from './avatar'
 type Claims = { sub: string; email?: string; [key: string]: unknown }
 
 export default function AccountForm({ claims }: { claims: Claims | null }) {
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
+  const [dirty, setDirty] = useState(false)
   const [loading, setLoading] = useState(true)
   const [fullname, setFullname] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
@@ -77,6 +78,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         updated_at: new Date().toISOString(),
       })
       if (error) throw error
+      setDirty(false)
       alert('Profile updated!')
     } catch (error) {
       alert('Error updating the data!')
@@ -86,7 +88,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
   }
 
   return (
-    <div className="form-widget">
+    <div className="form-widget" data-unsaved={dirty || loading}>
       <Avatar
         uid={claims?.sub ?? null}
         url={avatar_url}
@@ -106,7 +108,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
           id="fullName"
           type="text"
           value={fullname || ''}
-          onChange={(e) => setFullname(e.target.value)}
+          onChange={(e) => { setFullname(e.target.value); setDirty(true) }}
         />
       </div>
       <div>
@@ -115,7 +117,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
           id="username"
           type="text"
           value={username || ''}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) => { setUsername(e.target.value); setDirty(true) }}
         />
       </div>
       <div>
@@ -124,7 +126,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
           id="website"
           type="url"
           value={website || ''}
-          onChange={(e) => setWebsite(e.target.value)}
+          onChange={(e) => { setWebsite(e.target.value); setDirty(true) }}
         />
       </div>
 
@@ -148,3 +150,4 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
     </div>
   )
 }
+

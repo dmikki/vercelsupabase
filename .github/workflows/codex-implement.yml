@@ -1,0 +1,142 @@
+name: Implement app request with Codex
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Authorized application issue number
+        required: true
+        type: string
+      revision_pr:
+        description: Existing PR number (optional, for revisions)
+        required: false
+        type: string
+      revision:
+        description: Changes requested for that PR
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: codex-request-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'codex-approved'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    outputs:
+      issue: ${{ steps.prepare.outputs.issue }}
+      base: ${{ steps.prepare.outputs.base }}
+      revision_pr: ${{ steps.prepare.outputs.revision_pr }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          REVISION_PR: ${{ inputs.revision_pr }}
+          REVISION: ${{ inputs.revision }}
+        run: node scripts/development/prepare.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: request-prompt
+          path: ${{ runner.temp }}/request-prompt.md
+          retention-days: 1
+  implement:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.prepare.outputs.base }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm ci
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: request-prompt
+          path: ${{ runner.temp }}
+      - name: Codex implementation
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ runner.temp }}/request-prompt.md
+          output-file: ${{ runner.temp }}/summary.md
+          permission-profile: ':workspace'
+          safety-strategy: drop-sudo
+          allow-users: dmikki
+      # Only fixed packaging commands follow Codex; generated code is tested in a fresh, secret-free job.
+      - name: Package proposed diff
+        run: |
+          git -c core.hooksPath=/dev/null -c core.fsmonitor=false add --intent-to-add --all
+          git -c core.hooksPath=/dev/null -c core.fsmonitor=false diff --no-ext-diff --no-textconv --binary HEAD > "$RUNNER_TEMP/changes.patch"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: proposal
+          path: |
+            ${{ runner.temp }}/changes.patch
+            ${{ runner.temp }}/summary.md
+          retention-days: 1
+  publish:
+    needs: [prepare, implement]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.prepare.outputs.base }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: proposal
+          path: ${{ runner.temp }}/proposal
+      - name: Validate allowed files and publish PR
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ needs.prepare.outputs.issue }}
+          REVISION_PR: ${{ needs.prepare.outputs.revision_pr }}
+        run: node scripts/development/publish.mjs
+  report-failure:
+    needs: [prepare, implement, publish]
+    if: always() && needs.prepare.outputs.issue != '' && (needs.implement.result == 'failure' || needs.publish.result == 'failure' || needs.implement.result == 'cancelled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.prepare.outputs.base }}
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ needs.prepare.outputs.issue }}
+        run: |
+          node --input-type=module <<'JS'
+          import { api, label, removeLabel } from './scripts/development/github.mjs'
+          const n = Number(process.env.ISSUE_NUMBER)
+          await removeLabel(n,'codex-running')
+          await label(n,'codex-failed')
+          await api(`/issues/${n}/comments`,'POST',{body:`Implementation did not finish. Inspect the workflow run: https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}. A maintainer can retry through Actions → Implement app request with Codex.`})
+          JS

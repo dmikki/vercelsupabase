@@ -14,11 +14,13 @@ export default function Avatar({
   size: number
   onUpload: (url: string) => void
 }) {
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
   const [avatarUrl, setAvatarUrl] = useState<string | null>(url)
   const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
+    let objectUrl: string | undefined
+    let cancelled = false
     async function downloadImage(path: string) {
       try {
         const { data, error } = await supabase.storage.from('avatars').download(path)
@@ -26,14 +28,16 @@ export default function Avatar({
           throw error
         }
 
-        const url = URL.createObjectURL(data)
-        setAvatarUrl(url)
+        if (cancelled) return
+        objectUrl = URL.createObjectURL(data)
+        setAvatarUrl(objectUrl)
       } catch (error) {
         console.log('Error downloading image: ', error)
       }
     }
 
     if (url) downloadImage(url)
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [url, supabase])
 
   const uploadAvatar: React.ChangeEventHandler<HTMLInputElement> = async (event) => {
@@ -63,7 +67,7 @@ export default function Avatar({
   }
 
   return (
-    <div>
+    <div data-unsaved={uploading}>
       {avatarUrl ? (
         <Image
           width={size}
@@ -95,3 +99,4 @@ export default function Avatar({
     </div>
   )
 }
+
