@@ -12,8 +12,8 @@ test('only explicit admin acceptance or enabled threshold authorizes eligible wo
  assert.equal(mayAutoApprove(true,false,small,0),false)
  assert.equal(mayAutoApprove(true,true,small,0),true)
  assert.equal(mayAutoApprove(false,true,small,0),false)
- assert.equal(mayAutoApprove(false,false,small,small.usd[1]),true)
- assert.equal(mayAutoApprove(false,false,small,small.usd[1]-0.01),false)
+ assert.equal(mayAutoApprove(false,false,small,small.usd[1]),false)
+ assert.equal(mayAutoApprove(false,false,small,small.usd[1]+0.01),true)
  assert.equal(mayAutoApprove(true,true,estimateChange('Schema change','Add a database schema migration for this feature.'),100),false)
 })
 test('usage aggregates completion events and ignores embedded agent text',()=>{

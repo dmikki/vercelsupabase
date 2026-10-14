@@ -12,7 +12,7 @@ const git = args => execFileSync('git', ['-c','core.hooksPath=/dev/null','-c','c
 git(['apply','--check','--index',patchPath])
 git(['apply','--index',patchPath])
 const changed = git(['diff','--cached','--name-only','-z']).split('\0').filter(Boolean)
-if (!changed.length || changed.length > 40 || changed.some(path => !allowedPath(path))) throw new Error('Patch changes protected files or exceeds 40 files')
+if (!changed.length || changed.length > 40 || changed.some(path => !allowedPath(path))) throw new Error(`Patch changes protected files or exceeds 40 files: ${changed.filter(path=>!allowedPath(path)).join(', ') || changed.length}`)
 const entries = []
 for (const path of changed) {
   const status = git(['diff','--cached','--name-status','--',path])

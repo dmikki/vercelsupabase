@@ -1,7 +1,7 @@
 'use client'
 
 import {attachmentType,MAX_ATTACHMENTS} from '@/lib/change-request-attachments'
-import type { CostEstimate } from '@/lib/change-request-cost'
+import {AUTO_APPROVAL_LIMIT_USD,type CostEstimate } from '@/lib/change-request-cost'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 type Attachment = {id:string;name:string;mime:string;size:number;url?:string}
@@ -18,12 +18,10 @@ export default function ChangeRequestPanel() {
   const [requests, setRequests] = useState<ChangeRequest[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [quote, setQuote] = useState<{estimate:CostEstimate;token:string;autoApproved:boolean}|null>(null)
-  const [threshold, setThreshold] = useState('0')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const requestId = useRef<string | null>(null)
-  const policyLoaded = useRef(false)
   const heading = useRef<HTMLHeadingElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
 
@@ -33,7 +31,7 @@ export default function ChangeRequestPanel() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to load requests.')
       setRequests(data.requests); setIsAdmin(data.isAdmin)
-      if(data.isAdmin && !policyLoaded.current) { const policy=await fetch('/api/change-requests/settings',{cache:'no-store'}); const p=await policy.json(); if(policy.ok) {setThreshold(String(p.autoApproveUsd));policyLoaded.current=true} }
+
     } catch (error) { setError(error instanceof Error ? error.message : 'Unable to load requests.') }
   }, [])
 
@@ -74,18 +72,24 @@ export default function ChangeRequestPanel() {
     const data=await response.json(); if(!response.ok) throw new Error(data.error || 'Unable to estimate.')
     return data as {estimate:CostEstimate;token:string;autoApproved:boolean}
   }
-  async function estimate() { setBusy(true);setError('');try {setQuote(await getEstimate())} catch(e){setError(e instanceof Error?e.message:'Unable to estimate.')} finally{setBusy(false)} }
-  async function savePolicy() { setBusy(true);setError('');try {const response=await fetch('/api/change-requests/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoApproveUsd:Number(threshold)})}); const data=await response.json();if(!response.ok)throw new Error(data.error);setQuote(null);setMessage('Automatic approval policy saved.');}catch(e){setError(e instanceof Error?e.message:'Unable to save policy.')}finally{setBusy(false)} }
-  async function submit(existing?: ChangeRequest) {
+  async function estimate() {
+    setBusy(true);setError('')
+    try {
+      const q=await getEstimate()
+      if(!q.estimate.manualOnly&&q.estimate.usd[1]<AUTO_APPROVAL_LIMIT_USD) await submit(undefined,q)
+      else setQuote(q)
+    }catch(e){setError(e instanceof Error?e.message:'Unable to estimate.')}finally{setBusy(false)}
+  }
+  async function submit(existing?: ChangeRequest, acceptedQuote=quote) {
     setBusy(true); setError(''); setMessage('')
     requestId.current ||= crypto.randomUUID()
     try {
       const response = await fetch('/api/change-requests', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...(existing || { id: requestId.current, title, description }), kind:existing?.kind || kind, attachments:(existing?.attachments || attachments).map(f=>f.id), estimateToken:(existing ? await getEstimate(existing.title,existing.description,existing.attachments||[],existing.kind||'change',existing.id) : quote)?.token, acceptEstimate: !existing && isAdmin }) })
+        body: JSON.stringify({ ...(existing || { id: requestId.current, title, description }), kind:existing?.kind || kind, attachments:(existing?.attachments || attachments).map(f=>f.id), estimateToken:(existing ? await getEstimate(existing.title,existing.description,existing.attachments||[],existing.kind||'change',existing.id) : acceptedQuote)?.token, acceptEstimate: !existing && isAdmin }) })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to submit request.')
       if (!existing) { setTitle(''); setDescription(''); setAttachments([]);draftId.current=null;setQuote(null); requestId.current = null }
-      setMessage('Request saved. You can follow its progress below.'); await load()
+      setMessage('Request saved. Eligible estimates below $1 proceed automatically through implementation, checks, merge and deployment. Follow progress below.'); await load()
     } catch (error) { setError(error instanceof Error ? error.message : 'Unable to submit request.') }
     finally { setBusy(false) }
   }
@@ -128,7 +132,7 @@ export default function ChangeRequestPanel() {
         <small>Up to 5 files. Images: 2 MB each. TXT, MD, CSV and JSON: 100 KB each. Files are shared with your repository’s reviewers and Codex for this request.</small>
         <ul className="request-attachments">{attachments.map(file=><li key={file.id}>{file.mime.startsWith('image/')&&file.url&&<img src={file.url} alt={`Reference: ${file.name}`} />}<div><strong>{file.name}</strong><small>{(file.size/1024).toFixed(0)} KB · Uploaded</small></div><button type="button" disabled={busy} aria-label={`Remove ${file.name}`} onClick={()=>void removeAttachment(file.id)}>×</button></li>)}</ul>
         <small>Requests are sent to the app’s GitHub repository. Don’t include passwords or personal information. Up to 5 requests per day.</small>
-        <button className="button primary block" type="submit" disabled={busy}>{busy ? 'Working…' : 'Estimate change'}</button>
+        <button className="button primary block" type="submit" disabled={busy}>{busy ? 'Working…' : 'Estimate & submit'}</button>
       </form>
       {quote && <div className="change-request-estimate" aria-live="polite">
         <h3>Estimated API cost: ${quote.estimate.usd[0].toFixed(2)}–${quote.estimate.usd[1].toFixed(2)}</h3>
@@ -139,11 +143,7 @@ export default function ChangeRequestPanel() {
         <button className="button primary block" disabled={busy} onClick={()=>void submit()}>{quote.autoApproved ? 'Approve estimate & implement' : 'Submit with estimate'}</button>
         <button disabled={busy} onClick={()=>setQuote(null)}>Cancel estimate</button>
       </div>}
-      {isAdmin && <details className="change-request-estimate"><summary>Automatic spending approval</summary>
-        <p>Automatically authorize eligible requests from other users when the estimate’s upper end is at or below this amount. Zero turns it off. This is not a billing cap.</p>
-        <label htmlFor="auto-approval">Threshold (USD)</label><input id="auto-approval" type="number" min="0" max="100" step="0.01" value={threshold} onChange={e=>setThreshold(e.target.value)} />
-        <button disabled={busy} onClick={()=>void savePolicy()}>Save threshold</button>
-      </details>}
+      <details className="change-request-estimate"><summary>Automatic approval policy: below $1</summary><p>If the estimate’s upper end is below $1, submitting starts Codex automatically and passing code merges after CI and the Vercel preview succeed. Estimates of $1 or more require manual approval. Estimates are not billing caps.</p></details>
       {error && <p className="change-request-error" role="alert">{error}</p>}
       {message && <p className="change-request-success" role="status">{message}</p>}
       <div className="change-request-list-heading"><h3>{isAdmin ? 'Recent requests' : 'Your requests'}</h3><button onClick={() => void load()} disabled={busy}>Refresh</button></div>

@@ -1,4 +1,5 @@
 // Standard USD pricing verified 2026-10-14; keep workflow model and rates together.
+export const AUTO_APPROVAL_LIMIT_USD = 1
 export const MODEL = 'gpt-5.4-mini'
 export const PRICING = { input: 0.75, cached: 0.075, output: 4.5, date: '2026-10-14', source: 'https://developers.openai.com/api/docs/models/gpt-5.4-mini' }
 export function tokenCost(input: number, cached: number, output: number) {
@@ -19,5 +20,5 @@ export function estimateChange(title: string, description: string, attachmentRes
 }
 export type CostEstimate = ReturnType<typeof estimateChange>
 export function mayAutoApprove(isAdmin: boolean, accepted: boolean, estimate: CostEstimate, threshold: number) {
-  return !estimate.manualOnly && ((isAdmin && accepted) || (Number.isFinite(threshold) && threshold > 0 && estimate.usd[1] <= threshold))
+  return !estimate.manualOnly && ((isAdmin && accepted) || (Number.isFinite(threshold) && threshold > 0 && estimate.usd[1] < threshold))
 }
