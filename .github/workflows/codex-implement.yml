@@ -78,6 +78,9 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ runner.temp }}/request-prompt.md
+          model: gpt-5.4-mini
+          effort: medium
+          codex-args: '["--json"]'
           output-file: ${{ runner.temp }}/summary.md
           permission-profile: ':workspace'
           safety-strategy: drop-sudo
@@ -140,3 +143,26 @@ jobs:
           await label(n,'codex-failed')
           await api(`/issues/${n}/comments`,'POST',{body:`Implementation did not finish. Inspect the workflow run: https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}. A maintainer can retry through Actions → Implement app request with Codex.`})
           JS
+
+  usage:
+    needs: [prepare, implement]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Record observed usage, including incomplete runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ needs.prepare.outputs.issue }}
+          IMPLEMENT_RESULT: ${{ needs.implement.result }}
+        run: node scripts/development/report-usage.mjs
