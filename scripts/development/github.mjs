@@ -1,8 +1,8 @@
 export const repository = process.env.GITHUB_REPOSITORY
 if (!/^[\w.-]+\/[\w.-]+$/.test(repository || '')) throw new Error('Invalid repository')
-export async function api(path, method = 'GET', body) {
+export async function api(path, method = 'GET', body, token = process.env.GH_TOKEN) {
   const response = await fetch(`https://api.github.com/repos/${repository}${path}`, {
-    method, headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json',
+    method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
       'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
     body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000),
   })

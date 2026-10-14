@@ -16,7 +16,7 @@ const latestCommand = comments.filter(c => c.user.login === owner && (approvalSh
 const commanded = latestCommand && approvalSha(latestCommand.body) === pr.head.sha
 const rejected = latestCommand?.body.trim() === '/reject' || latest?.state === 'CHANGES_REQUESTED'
 if (rejected || (!reviewed && !commanded)) { console.log('Waiting for owner approval of the current commit.'); process.exit(0) }
-const { check_runs: checks } = await api(`/commits/${pr.head.sha}/check-runs?per_page=100`)
+const { check_runs: checks } = await api(`/commits/${pr.head.sha}/check-runs?per_page=100`, 'GET', undefined, process.env.GH_CHECKS_TOKEN)
 const statuses = await api(`/commits/${pr.head.sha}/statuses?per_page=100`)
 const base = await api('/git/ref/heads/main')
 const latestPr = await api(`/pulls/${number}`)

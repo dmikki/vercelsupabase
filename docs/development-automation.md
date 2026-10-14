@@ -26,7 +26,7 @@ For the existing cloud example, run this new migration in Supabase SQL Editor, o
 
 ### 2. GitHub credentials
 
-Create a fine-grained personal access token restricted to **dmikki/vercelsupabase**. For the initial implementation, the publishing/merge token needs repository **Contents, Issues, Pull requests, Actions: read and write**, and **Checks: read**. Choose an expiration and replace it before expiry. Store it in GitHub repository **Settings → Secrets and variables → Actions → New repository secret** as:
+Create a fine-grained personal access token restricted to **dmikki/vercelsupabase**. For the initial implementation, the publishing/merge token needs repository **Contents, Issues, Pull requests, Actions: read and write**, and **Commit statuses: read**. Check runs are read using the workflow’s built-in GitHub token with **checks: read**, so the personal token does not need a Checks permission. Choose an expiration and replace it before expiry. Store it in GitHub repository **Settings → Secrets and variables → Actions → New repository secret** as:
 
 - `AUTOMATION_GITHUB_TOKEN`: publishes branches/PRs, dispatches validation, and merges owner-approved code. A personal token makes the PR author that account. Use the exact-SHA approval comment below because GitHub prohibits self-review approval.
 - `OPENAI_API_KEY`: an API-project key with API billing enabled and an appropriate project budget. The automated workflow uses API access; a local Codex sign-in is not the CI credential.

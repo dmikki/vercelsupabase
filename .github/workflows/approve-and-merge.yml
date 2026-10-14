@@ -15,6 +15,7 @@ on:
         type: string
 permissions:
   contents: read
+  checks: read
 jobs:
   merge:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'status' || github.event_name == 'check_run' || github.event_name == 'pull_request_review' || github.event.issue.pull_request
@@ -33,6 +34,7 @@ jobs:
       - name: Merge only owner-approved, validated commit
         env:
           GH_TOKEN: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
+          GH_CHECKS_TOKEN: ${{ github.token }}
           DEVELOPMENT_REVIEWER: dmikki
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
         run: |
