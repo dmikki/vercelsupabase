@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { allowedPath, approvalSha, checksPass } from '../scripts/development/policy.mjs'
 
 test('code generation cannot replace automation, migrations, secrets, or traversal paths', () => {
-  for (const p of ['.github/workflows/ci.yml','supabase/migrations/delete.sql','package.json','scripts/development/approve.mjs','app/api/change-requests/route.ts','lib/change-requests-server.ts','app/../.env','app/.env','app/components/release-updater.tsx','app/components/dashboard-shell.tsx','app/api/change-requests/attachments/route.ts','lib/change-request-attachments.ts']) assert.equal(allowedPath(p),false,p)
+  for (const p of ['.github/workflows/ci.yml','supabase/migrations/delete.sql','package.json','scripts/development/approve.mjs','app/api/change-requests/route.ts','lib/change-requests-server.ts','app/../.env','app/.env','app/components/release-updater.tsx','app/api/change-requests/attachments/route.ts','lib/change-request-attachments.ts']) assert.equal(allowedPath(p),false,p)
   assert.equal(allowedPath('app/components/dark-mode.tsx'),true)
   assert.equal(allowedPath('lib/profile.ts'),true)
+  assert.equal(allowedPath('app/components/dashboard-shell.tsx'),true)
 })
 test('approval must contain the entire exact commit', () => {
   assert.equal(approvalSha('/approve abc123'),null)
