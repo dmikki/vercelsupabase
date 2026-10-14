@@ -15,6 +15,9 @@ permissions:
 jobs:
   resolve:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       head: ${{ steps.resolve.outputs.head }}
       base: ${{ steps.resolve.outputs.base }}

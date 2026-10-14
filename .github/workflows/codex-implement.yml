@@ -28,6 +28,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: read
     outputs:
       issue: ${{ steps.prepare.outputs.issue }}
       base: ${{ steps.prepare.outputs.base }}
@@ -80,6 +81,7 @@ jobs:
           output-file: ${{ runner.temp }}/summary.md
           permission-profile: ':workspace'
           safety-strategy: drop-sudo
+          allow-users: dmikki
       # Only fixed packaging commands follow Codex; generated code is tested in a fresh, secret-free job.
       - name: Package proposed diff
         run: |
