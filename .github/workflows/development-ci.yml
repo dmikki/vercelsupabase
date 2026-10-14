@@ -18,11 +18,13 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: read
     outputs:
       head: ${{ steps.resolve.outputs.head }}
       base: ${{ steps.resolve.outputs.base }}
       number: ${{ steps.resolve.outputs.number }}
       codex: ${{ steps.resolve.outputs.codex }}
+      automatic: ${{ steps.resolve.outputs.automatic }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -45,7 +47,14 @@ jobs:
           if (!Number.isSafeInteger(n) || n < 1) throw Error('Invalid PR')
           const pr = await api(`/pulls/${n}`)
           if (pr.head.repo.full_name !== process.env.GITHUB_REPOSITORY || pr.base.ref !== 'main' || pr.head.sha !== process.env.EXPECTED_SHA) throw Error('Unexpected PR target or outdated commit')
-          await appendFile(process.env.GITHUB_OUTPUT,`head=${pr.head.sha}\nbase=${pr.base.sha}\nnumber=${n}\ncodex=${pr.head.ref.startsWith('codex/request-')}\n`)
+          let automatic=''
+          const issueNumber=Number(/^codex\/request-(\d+)-/.exec(pr.head.ref)?.[1])
+          if(issueNumber && pr.body?.includes(`Closes #${issueNumber}\n`)) {
+            const {automaticUpperEstimate}=await import('./scripts/development/auto-policy.mjs')
+            const amount=automaticUpperEstimate(await api(`/issues/${issueNumber}`))
+            if(amount!==null)automatic=String(amount)
+          }
+          await appendFile(process.env.GITHUB_OUTPUT,`head=${pr.head.sha}\nbase=${pr.base.sha}\nnumber=${n}\ncodex=${pr.head.ref.startsWith('codex/request-')}\nautomatic=${automatic}\n`)
           JS
   test:
     needs: resolve
@@ -94,6 +103,7 @@ jobs:
           PR_NUMBER: ${{ needs.resolve.outputs.number }}
           TEST_RESULT: ${{ needs.test.result }}
           AUTO_MERGE: ${{ needs.resolve.outputs.codex }}
+          AUTO_UPPER: ${{ needs.resolve.outputs.automatic }}
         run: |
           node --input-type=module <<'JS'
           const api = async (path,method,body) => {
@@ -102,6 +112,6 @@ jobs:
             return r.status===204 ? undefined : r.json()
           }
           const success = process.env.TEST_RESULT === 'success'
-          await api('/check-runs','POST',{name:'Development CI',head_sha:process.env.HEAD_SHA,status:'completed',conclusion:success?'success':'failure',output:{title:success?'Validation passed':'Validation failed',summary:`base:${process.env.BASE_SHA}\nTypeScript, tests, and production build against the proposed merge.`}})
+          await api('/check-runs','POST',{name:'Development CI',head_sha:process.env.HEAD_SHA,status:'completed',conclusion:success?'success':'failure',output:{title:success?'Validation passed':'Validation failed',summary:`base:${process.env.BASE_SHA}\nauto-merge:${process.env.HEAD_SHA}:${process.env.AUTO_UPPER}\nTypeScript, tests, and production build against the proposed merge.`}})
           if (success && process.env.AUTO_MERGE === 'true') await api('/actions/workflows/approve-and-merge.yml/dispatches','POST',{ref:'main',inputs:{pr_number:process.env.PR_NUMBER}})
           JS
