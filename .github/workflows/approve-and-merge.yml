@@ -53,5 +53,5 @@ jobs:
               const result=spawnSync('node',['scripts/development/approve.mjs'],{stdio:'inherit',env:{...process.env,PR_NUMBER:String(pr.number)}})
               if(result.status) process.exitCode=result.status
             }
-            JS
+          JS
           fi
