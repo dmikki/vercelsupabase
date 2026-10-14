@@ -220,3 +220,8 @@ These official examples are maintained by the Supabase team:
 - [Supabase](https://supabase.com)
 
 Supabase is open source. We'd love for you to follow along and get involved at https://github.com/supabase/supabase
+
+# Automated app change requests
+
+This repository includes a logged-in change-request panel and a Codex/GitHub/Vercel development workflow. See [development-automation.md](docs/development-automation.md) for activation, credentials, owner approval, revisions, validation, and rollback. Configure the migration and server environment before submitting requests.
+

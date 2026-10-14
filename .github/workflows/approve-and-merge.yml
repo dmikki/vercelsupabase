@@ -1,0 +1,55 @@
+name: Owner approval and merge
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  status:
+  check_run:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR to recheck for owner approval and passing checks
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  merge:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'status' || github.event_name == 'check_run' || github.event_name == 'pull_request_review' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    concurrency:
+      group: development-merge
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Merge only owner-approved, validated commit
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
+          DEVELOPMENT_REVIEWER: dmikki
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          if [ -n "$PR_NUMBER" ]; then
+            node scripts/development/approve.mjs
+          else
+            node --input-type=module <<'JS'
+            import { readFile } from 'node:fs/promises'
+            import { spawnSync } from 'node:child_process'
+            import { api } from './scripts/development/github.mjs'
+            const event=JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH,'utf8'))
+            const sha=event.sha || event.check_run?.head_sha
+            if (!/^[0-9a-f]{40}$/.test(sha || '')) process.exit(0)
+            const prs=await api(`/commits/${sha}/pulls`)
+            for(const pr of prs.filter(p=>p.state==='open' && p.head.ref.startsWith('codex/request-'))) {
+              const result=spawnSync('node',['scripts/development/approve.mjs'],{stdio:'inherit',env:{...process.env,PR_NUMBER:String(pr.number)}})
+              if(result.status) process.exitCode=result.status
+            }
+            JS
+          fi
