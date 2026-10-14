@@ -394,3 +394,6 @@ button.primary,
 .release-notice { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 12px 18px; border-radius: 10px; background: #166534; color: white; box-shadow: 0 4px 20px #0002; z-index: 50; width: max-content; max-width: 90vw; }
 .release-notice button { background: transparent; color: white; text-decoration: underline; border: 0; cursor: pointer; }
 @media (max-width: 600px) { .change-request-panel { right: 16px; bottom: 84px; padding: 18px; } .change-request-trigger { right: 16px; bottom: 16px; } }
+
+.change-request-estimate { padding: 16px; margin: 16px 0; border: 1px solid var(--custom-border-color, #555); border-radius: 12px; }
+.change-request-estimate small, .change-request-list small { display: block; line-height: 1.5; margin: 8px 0; }
