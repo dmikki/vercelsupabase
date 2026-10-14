@@ -1,3 +1,5 @@
+import {ownedAttachments,attachmentContext,referenceManifest,requestAttachments} from '@/lib/change-request-attachments-server'
+import {ATTACHMENT_BUCKET} from '@/lib/change-request-attachments'
 import { requestContext, requestAdmin, requestError } from '@/lib/change-requests-server'
 import { ensureRequestIssue, github, type GitHubIssue, type GitHubPull } from '@/lib/development-github'
 import { estimateChange, mayAutoApprove, tokenCost, MODEL } from '@/lib/change-request-cost'
@@ -14,7 +16,10 @@ export async function POST(request: Request) {
     if (body.length > 50000) throw new Error('Request is too large.')
     const parsed = JSON.parse(body)
     const input = parseChangeRequest(parsed)
-    const estimate = verifyEstimate(parsed.estimateToken,user.id,input.title,input.description)
+    const files=await ownedAttachments(user.id,parsed.attachments,input.id)
+    const context=attachmentContext(files,input.kind)
+    const estimate = verifyEstimate(parsed.estimateToken,user.id,input.title,input.description,context)
+    const fingerprint=context+JSON.stringify(estimate)
     const autoApproved = mayAutoApprove(isAdmin,parsed.acceptEstimate === true,estimate,await spendingPolicy())
     const admin = requestAdmin()
     const { error } = await supabase.rpc('submit_change_request', {
@@ -23,18 +28,21 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message.includes('Daily request limit') ? 'Daily request limit reached (5 per day).' : 'Unable to save request. Check that the database migration has been applied.')
     const { data: row, error: readError } = await admin.from('change_requests').select('*').eq('id', input.id).eq('user_id', user.id).single()
     if (readError || !row) throw new Error('Unable to find your request.')
-    if (row.title !== input.title || row.description !== input.description) throw new Error('Request ID already belongs to different content.')
+    if (row.title !== input.title || row.description !== input.description || (row.github_issue_number && row.kind !== input.kind)) throw new Error('Request ID already belongs to different content.')
     if (row.github_issue_number) return Response.json({ id: row.id, status: 'submitted' })
+    const approved=autoApproved||(row.auto_authorized===true&&row.authorization_fingerprint===fingerprint)
     // A lease prevents concurrent retries from publishing the same request.
     if (row.status === 'publishing' && Date.now() - new Date(row.updated_at).getTime() < 120000)
       return Response.json({ id: row.id, status: 'publishing' }, { status: 202 })
     const { data: claimed, error: claimError } = await admin.from('change_requests')
-      .update({ estimate, auto_authorized: autoApproved || row.auto_authorized === true, status: 'publishing', updated_at: new Date().toISOString() })
+      .update({ estimate, kind:input.kind, auto_authorized: approved, authorization_fingerprint:fingerprint, status: 'publishing', updated_at: new Date().toISOString() })
       .eq('id', row.id).eq('updated_at', row.updated_at).select('id')
     if (claimError) throw new Error('Unable to reserve request for publication.')
     if (!claimed?.length) return Response.json({ id: row.id, status: 'publishing' }, { status: 202 })
     try {
-      const issue = await ensureRequestIssue({ ...row, estimate }, autoApproved || row.auto_authorized === true)
+      if(files.length) {const {data:linked,error:linkError}=await admin.from('change_request_attachments').update({request_id:row.id}).eq('user_id',user.id).in('id',files.map(f=>f.id)).eq('ready',true).or(`request_id.is.null,request_id.eq.${row.id}`).select('id');if(linkError||linked?.length!==files.length)throw Error('Unable to link attachments.')}
+      const references=await referenceManifest(files)
+      const issue = await ensureRequestIssue({ ...row, kind:input.kind, references, estimate }, approved)
       const { error: saveError } = await admin.from('change_requests').update({
         github_issue_number: issue.number, status: 'submitted', updated_at: new Date().toISOString(),
       }).eq('id', row.id)
@@ -51,10 +59,12 @@ export async function GET() {
   try {
     const { supabase, isAdmin } = await requestContext()
     const { data, error } = await (isAdmin ? requestAdmin() : supabase).from('change_requests')
-      .select('id,title,description,status,github_issue_number,created_at,estimate').order('created_at', { ascending: false }).limit(10)
+      .select('id,title,description,status,github_issue_number,created_at,estimate,kind').order('created_at', { ascending: false }).limit(10)
     if (error) throw new Error('Unable to load requests. Check that the database migration has been applied.')
     const requests = await Promise.all((data || []).map(async row => {
-      if (!row.github_issue_number) return row
+      const attached=await requestAttachments(row.id)
+      const attachments=await Promise.all(attached.map(async f=>{const {data}=await requestAdmin().storage.from(ATTACHMENT_BUCKET).createSignedUrl(f.storage_path,3600);return {id:f.id,name:f.name,mime:f.mime,size:f.size,url:data?.signedUrl}}))
+      if (!row.github_issue_number) return {...row,attachments}
       try {
         const issue = await github<GitHubIssue>(`/issues/${row.github_issue_number}`)
         const labels = issue.labels.map(label => label.name)
@@ -80,8 +90,8 @@ export async function GET() {
           try { const u = JSON.parse(match[1]); if (u.model !== MODEL || !/^\d+:\d+$/.test(u.run)) continue; const usd=tokenCost(u.input,u.cached,u.output); usageRuns.set(u.run,{input:u.input,cached:u.cached,output:u.output,usd,complete:u.complete===true,available:Number.isSafeInteger(u.turns)&&u.turns>0}) } catch { /* Invalid reports are ignored. */ }
         }
         const usage = [...usageRuns.values()]
-        return { ...row, estimate: row.estimate || estimateChange(row.title,row.description), usage, status, issue_url: issue.html_url, pr_url: prUrl }
-      } catch { return { ...row, status: 'status_unavailable' } }
+        return { ...row, attachments, estimate: row.estimate || estimateChange(row.title,row.description), usage, status, issue_url: issue.html_url, pr_url: prUrl }
+      } catch { return { ...row, attachments, status: 'status_unavailable' } }
     }))
     return Response.json({ requests, isAdmin }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) { return requestError(error) }

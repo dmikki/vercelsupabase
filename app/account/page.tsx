@@ -1,3 +1,4 @@
+import DashboardShell from '@/app/components/dashboard-shell'
 import AccountForm from './account-form'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
@@ -9,8 +10,9 @@ export default async function Account() {
 
   const { data: claimsData } = await supabase.auth.getClaims()
   if (!claimsData?.claims) redirect('/login')
+  const {data:{user}}=await supabase.auth.getUser()
   return <>
-    <AccountForm claims={claimsData.claims} />
+    <DashboardShell email={user?.email || ''} name={user?.user_metadata?.full_name || ''} environment={process.env.VERCEL_ENV || 'Local'}><AccountForm claims={claimsData.claims} /></DashboardShell>
     <ChangeRequestPanel />
     <ReleaseUpdater initialVersion={process.env.VERCEL_GIT_COMMIT_SHA || 'local'} />
   </>

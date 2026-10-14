@@ -2,7 +2,7 @@ export function allowedPath(path) {
   if (path.includes('..') || path.startsWith('/') || path.includes('\\')) return false
   if (!/^(app|lib|public|tests)\//.test(path)) return false
   if (/^(lib\/supabase\/|app\/auth\/|app\/login\/actions\.)/.test(path)) return false
-  if (/^(app\/api\/(change-requests|version)(\/|$)|app\/components\/(change-request-panel|release-updater)\.|lib\/(change-request|development-github))/.test(path)) return false
+  if (/^(app\/api\/(change-requests|version)(\/|$)|app\/components\/(change-request-panel|release-updater|dashboard-shell)\.|lib\/(change-request|development-github))/.test(path)) return false
   if (/(^|\/)\.[^/]+/.test(path)) return false
   return /\.(tsx?|jsx?|mjs|css|json|svg|png|jpe?g|webp|md)$/.test(path)
 }
