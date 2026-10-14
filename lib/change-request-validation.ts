@@ -7,7 +7,8 @@ export function parseChangeRequest(value: unknown) {
     throw new Error('Use a title between 5 and 120 characters.')
   if (typeof v.description !== 'string' || v.description.trim().length < 20 || v.description.trim().length > 6000)
     throw new Error('Describe the change in 20–6,000 characters.')
-  return { id: v.id, title: v.title.trim(), description: v.description.trim() }
+  if (v.kind !== undefined && !['change','suggestion'].includes(v.kind as string)) throw new Error('Invalid request type.')
+  return { kind: (v.kind || 'change') as 'change' | 'suggestion', id: v.id, title: v.title.trim(), description: v.description.trim() }
 }
 export function sameOrigin(origin: string | null, host: string | null, protocol: string) {
   if (!origin || !host) return false

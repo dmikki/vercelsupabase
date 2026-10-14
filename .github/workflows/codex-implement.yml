@@ -56,6 +56,26 @@ jobs:
           name: request-prompt
           path: ${{ runner.temp }}/request-prompt.md
           retention-days: 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: reference-files
+          path: ${{ runner.temp }}/reference-files
+          retention-days: 1
+      - name: Report preparation failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+        run: |
+          node --input-type=module <<'JS'
+          import {api,label} from './scripts/development/github.mjs'
+          const n=Number(process.env.ISSUE_NUMBER)
+          if(!Number.isSafeInteger(n)||n<1)process.exit(0)
+          const issue=await api(`/issues/${n}`)
+          if(!issue.body?.match(/<!-- app-request:[0-9a-f-]{36} -->/i)||!issue.labels.some(l=>l.name==='codex-approved'))process.exit(0)
+          await label(n,'codex-failed')
+          await api(`/issues/${n}/comments`,'POST',{body:'Implementation preparation failed before the model started. Inspect the Actions log. If reference links expired, the administrator must renew them before retrying.'})
+          JS
   implement:
     needs: prepare
     runs-on: ubuntu-latest
@@ -73,6 +93,21 @@ jobs:
         with:
           name: request-prompt
           path: ${{ runner.temp }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: reference-files
+          path: ${{ runner.temp }}/reference-files
+      - id: references
+        name: Prepare image arguments
+        run: |
+          node --input-type=module <<'JS'
+          import {readFile,appendFile} from 'node:fs/promises'
+          const dir=`${process.env.RUNNER_TEMP}/reference-files`
+          const images=JSON.parse(await readFile(`${dir}/images.json`,'utf8'))
+          if(!Array.isArray(images)||images.length>5||images.some(n=>typeof n!=='string'||!/^reference-[1-5]\.(png|jpg|webp)$/.test(n)))throw Error('Invalid reference images')
+          const args=['--json',...images.flatMap(n=>['--image',`${dir}/${n}`])]
+          await appendFile(process.env.GITHUB_OUTPUT,`args=${JSON.stringify(args)}\n`)
+          JS
       - name: Codex implementation
         uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
         with:
@@ -80,7 +115,7 @@ jobs:
           prompt-file: ${{ runner.temp }}/request-prompt.md
           model: gpt-5.4-mini
           effort: medium
-          codex-args: '["--json"]'
+          codex-args: ${{ steps.references.outputs.args }}
           output-file: ${{ runner.temp }}/summary.md
           permission-profile: ':workspace'
           safety-strategy: drop-sudo
