@@ -8,8 +8,13 @@ const highlights = [
   'Keep the experience focused, simple, and quick to scan.',
 ]
 
-export default async function LoginPage({searchParams}: {searchParams: Promise<{message?: string}>}) {
-  const {message} = await searchParams
+export default async function LoginPage({searchParams}: {searchParams: Promise<{message?: string; signup?: string}>}) {
+  const {message, signup: signupStatus} = await searchParams
+  const signupMessage = signupStatus === 'success'
+    ? 'Sign-up successful! Please log in with your email and password.'
+    : signupStatus === 'confirm'
+      ? 'Sign-up successful! Check your inbox (and spam folder) to confirm your email, then return here and log in.'
+      : null
   return (
     <main className="login-shell">
       <section className="login-brand-panel">
@@ -44,6 +49,7 @@ export default async function LoginPage({searchParams}: {searchParams: Promise<{
           <p>Use your email and password to continue.</p>
         </div>
 
+        {signupMessage && <p role="status" style={{padding: '12px 16px', border: '1px solid #3f6d55', borderRadius: 12, color: '#dff8ea'}}>{signupMessage}</p>}
         {message && <p role="alert">{message}</p>}
         <form className="login-form">
           <label htmlFor="email">Email address</label>
