@@ -26,7 +26,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
 
       const { data, error, status } = await supabase
         .from('profiles')
-        .select(`full_name, username, website, avatar_url`)
+        .select(`full_name, username, website, avatar_url, mobile_phone`)
         .eq('id', claims.sub)
         .single()
 
@@ -40,10 +40,9 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         setUsername(data.username)
         setWebsite(data.website)
         setAvatarUrl(data.avatar_url)
+        setMobilePhone(data.mobile_phone)
       }
 
-      const { data: userData } = await supabase.auth.getUser()
-      setMobilePhone(userData.user?.user_metadata?.mobile_phone ?? null)
     } catch (error) {
       alert('Error loading user data!')
     } finally {
@@ -81,14 +80,10 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         username,
         website,
         avatar_url,
+        mobile_phone: mobile_phone?.trim() || null,
         updated_at: new Date().toISOString(),
       })
       if (error) throw error
-
-      const { error: mobilePhoneError } = await supabase.auth.updateUser({
-        data: { mobile_phone: mobile_phone || null },
-      })
-      if (mobilePhoneError) throw mobilePhoneError
 
       setDirty(false)
       alert('Profile updated!')
