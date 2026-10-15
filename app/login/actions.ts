@@ -43,7 +43,7 @@ export async function signup(formData: FormData) {
 
   // Supabase can return an obfuscated existing user without an error.
   if (result.user?.identities?.length === 0) {
-    redirect('/login?message=' + encodeURIComponent('If you already registered, please log in. Otherwise, check your email for confirmation instructions.'))
+    redirect('/login?signup=existing')
   }
   if (!result.user) {
     redirect('/login?message=' + encodeURIComponent('Unable to complete sign-up. Please try again.'))
