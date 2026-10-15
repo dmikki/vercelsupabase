@@ -1,7 +1,7 @@
-type Viewer = { email?: string | null; email_confirmed_at?: string | null }
+type Viewer = { email_confirmed_at?: string | null }
 
-export function canViewRepositoryLinks(user: Viewer) {
-  return Boolean(user.email_confirmed_at) && user.email?.trim().toLowerCase() === 'durga1@gmail.com'
+export function canViewRepositoryLinks(user: Viewer, isAdmin: boolean) {
+  return isAdmin && Boolean(user.email_confirmed_at)
 }
 
 export function requestForViewer<T extends { github_issue_number?: unknown; issue_url?: unknown; pr_url?: unknown }>(request: T, allowed: boolean) {

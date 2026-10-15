@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Avatar from './avatar'
 
@@ -8,7 +8,8 @@ type Claims = { sub: string; email?: string; [key: string]: unknown }
 export default function AccountForm({ claims }: { claims: Claims | null }) {
   const [supabase] = useState(() => createClient())
   const [dirty, setDirty] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const userId = claims?.sub
+  const [loading, setLoading] = useState(Boolean(userId))
   const [fullname, setFullname] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
   const [website, setWebsite] = useState<string | null>(null)
@@ -16,45 +17,31 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
   const [companyName, setCompanyName] = useState<string | null>(null)
   const [avatar_url, setAvatarUrl] = useState<string | null>(null)
 
-  const getProfile = useCallback(async () => {
-    try {
-      if (!claims?.sub) {
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-
-      const { data, error, status } = await supabase
-        .from('profiles')
-        .select(`full_name, username, website, avatar_url, mobile_phone, company_name`)
-        .eq('id', claims.sub)
-        .single()
-
-      if (error && status !== 406) {
-        console.log(error)
-        throw error
-      }
-
-      if (data) {
-        setFullname(data.full_name)
-        setUsername(data.username)
-        setWebsite(data.website)
-        setAvatarUrl(data.avatar_url)
-        setMobilePhone(data.mobile_phone)
-        setCompanyName(data.company_name)
-      }
-
-    } catch (error) {
-      alert('Error loading user data!')
-    } finally {
-      setLoading(false)
-    }
-  }, [claims, supabase])
-
   useEffect(() => {
-    getProfile()
-  }, [claims, getProfile])
+    if (!userId) return
+    let cancelled = false
+    supabase
+      .from('profiles')
+      .select(`full_name, username, website, avatar_url, mobile_phone, company_name`)
+      .eq('id', userId)
+      .single()
+      .then(({ data, error, status }) => {
+        if (cancelled) return
+        if (error && status !== 406) {
+          console.log(error)
+          alert('Error loading user data!')
+        } else if (data) {
+          setFullname(data.full_name)
+          setUsername(data.username)
+          setWebsite(data.website)
+          setAvatarUrl(data.avatar_url)
+          setMobilePhone(data.mobile_phone)
+          setCompanyName(data.company_name)
+        }
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [userId, supabase])
 
   async function updateProfile({
     username,
@@ -90,7 +77,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
 
       setDirty(false)
       alert('Profile updated!')
-    } catch (error) {
+    } catch {
       alert('Error updating the data!')
     } finally {
       setLoading(false)

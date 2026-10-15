@@ -21,6 +21,20 @@ export async function github<T>(path: string, options: RequestInit = {}): Promis
   return response.status === 204 ? undefined as T : await response.json() as T
 }
 
+// Per-instance memory cache: limits GitHub API use when many viewers poll request status.
+const memo = new Map<string, { expires: number; value: unknown }>()
+export async function cached<T>(key: string, load: () => Promise<T>, ttlMs: (value: T) => number): Promise<T> {
+  const hit = memo.get(key)
+  if (hit && hit.expires > Date.now()) return hit.value as T
+  const value = await load()
+  memo.delete(key)
+  memo.set(key, { value, expires: Date.now() + ttlMs(value) })
+  if (memo.size > 500) memo.delete(memo.keys().next().value!)
+  return value
+}
+export function forget(key: string) { memo.delete(key) }
+export const issueProgressKey = (number: number) => `issue-progress:${number}`
+
 export type GitHubIssue = { number: number; html_url: string; state: string; labels: { name: string }[] }
 export type GitHubPull = { number: number; html_url: string; state: string; merged_at: string | null; merge_commit_sha: string | null }
 

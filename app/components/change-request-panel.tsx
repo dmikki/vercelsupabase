@@ -38,7 +38,7 @@ export default function ChangeRequestPanel() {
 
   useEffect(() => {
     if (!open) return
-    void load(); heading.current?.focus()
+    heading.current?.focus()
     const timer = setInterval(() => { if (!document.hidden) void load() }, 60000)
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setOpen(false); (document.querySelector('.dashboard-request-button') as HTMLButtonElement|null)?.focus() } }
     document.addEventListener('keydown', escape)
@@ -46,9 +46,9 @@ export default function ChangeRequestPanel() {
   }, [open, load])
 
   useEffect(()=>{
-    const show=(event:Event)=>{setOpen(true);if(!title&&!description&&!attachments.length)setKind((event as CustomEvent).detail?.kind==='suggestion'?'suggestion':'change')}
+    const show=(event:Event)=>{setOpen(true);void load();if(!title&&!description&&!attachments.length)setKind((event as CustomEvent).detail?.kind==='suggestion'?'suggestion':'change')}
     window.addEventListener('open-change-request',show);return()=>window.removeEventListener('open-change-request',show)
-  },[title,description,attachments.length])
+  },[title,description,attachments.length,load])
   async function uploadFiles(files:FileList|null) {
     if(!files)return
     setError('');setBusy(true);setQuote(null)
@@ -115,7 +115,7 @@ export default function ChangeRequestPanel() {
 
   return <>
     <button ref={trigger} className="change-request-trigger dashboard-hidden-trigger" aria-expanded={open} aria-controls="change-request-panel"
-      onClick={() => setOpen(value => !value)}>
+      onClick={() => { if (!open) void load(); setOpen(value => !value) }}>
       <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9H13a8.5 8.5 0 0 1 8 8v.5Z"/></svg>
       Request a change
     </button>

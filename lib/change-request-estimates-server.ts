@@ -7,8 +7,8 @@ export function estimateWithReferences(title:string,description:string,context='
   return estimateChange(title,description,reserve)
 }
 function signingKey() {
-  const key=process.env.SUPABASE_SERVICE_ROLE_KEY
-  if(!key) throw Error('Estimate signing is not configured.')
+  const key=process.env.ESTIMATE_SIGNING_SECRET
+  if(!key||key.length<32) throw Error('Estimate signing is not configured.')
   return key
 }
 export function signEstimate(user:string,title:string,description:string,context='') {

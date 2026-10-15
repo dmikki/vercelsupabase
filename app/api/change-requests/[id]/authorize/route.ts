@@ -1,7 +1,7 @@
 import {requestAttachments,attachmentContext,refreshIssueReferences} from '@/lib/change-request-attachments-server'
 import { requestContext, requestAdmin, requestError } from '@/lib/change-requests-server'
 import { verifyEstimate } from '@/lib/change-request-estimates-server'
-import { github, queueRequestIssue, type GitHubIssue } from '@/lib/development-github'
+import { forget, github, issueProgressKey, queueRequestIssue, type GitHubIssue } from '@/lib/development-github'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,6 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await refreshIssueReferences(row.github_issue_number,files)
     // Labels are provisioned as part of setup; repeated authorization is idempotent.
     await queueRequestIssue(await github<GitHubIssue>(`/issues/${row.github_issue_number}`),true)
+    forget(issueProgressKey(row.github_issue_number))
     return Response.json({ status: 'queued' })
   } catch (error) { return requestError(error) }
 }

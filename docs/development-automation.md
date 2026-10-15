@@ -44,7 +44,8 @@ In Vercel **vercelsupabase → Settings → Environment Variables**, add these s
 | `DEVELOPMENT_GITHUB_REPOSITORY` | `dmikki/vercelsupabase` |
 | `DEVELOPMENT_GITHUB_TOKEN` | A separate fine-grained repository token with Issues read/write, Contents read, Pull requests read. Used to publish requests and read status; no code write/merge access needed. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Secret/service-role key of the database for this environment. Server-only bookkeeping and administrator reads. Never use a `NEXT_PUBLIC_` prefix. |
-| `DEVELOPMENT_ADMIN_USER_IDS` | Your **app user's Supabase UUID**, not your GitHub username. Comma-separated if there are multiple admins. Get it from Authentication → Users. Local and cloud IDs can differ. |
+| `ESTIMATE_SIGNING_SECRET` | A random value of at least 32 characters (for example `openssl rand -hex 32`) used only to sign cost estimates. Rotating it invalidates outstanding estimates. Never use a `NEXT_PUBLIC_` prefix. |
+| `DEVELOPMENT_ADMIN_USER_IDS` | Your **app user's Supabase UUID**, not your GitHub username. Comma-separated if there are multiple admins. Get it from Authentication → Users. Local and cloud IDs can differ. Admins with a confirmed email also see GitHub issue and PR links. |
 
 Production should use cloud Supabase. Local Docker uses local Supabase keys. Preview builds should use a separate test Supabase project and its own administrator ID and service key. Do not give arbitrary preview code production secrets. Keep the existing `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` values appropriate to each environment.
 
