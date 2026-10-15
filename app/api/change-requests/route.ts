@@ -1,3 +1,4 @@
+import {canViewRepositoryLinks, requestForViewer} from '@/lib/change-request-access'
 import {ownedAttachments,attachmentContext,referenceManifest,requestAttachments} from '@/lib/change-request-attachments-server'
 import {ATTACHMENT_BUCKET} from '@/lib/change-request-attachments'
 import { requestContext, requestAdmin, requestError } from '@/lib/change-requests-server'
@@ -57,7 +58,8 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const { supabase, isAdmin } = await requestContext()
+    const { supabase, user, isAdmin } = await requestContext()
+    const canViewLinks = canViewRepositoryLinks(user)
     const { data, error } = await (isAdmin ? requestAdmin() : supabase).from('change_requests')
       .select('id,title,description,status,github_issue_number,created_at,estimate,kind').order('created_at', { ascending: false }).limit(10)
     if (error) throw new Error('Unable to load requests. Check that the database migration has been applied.')
@@ -93,6 +95,6 @@ export async function GET() {
         return { ...row, attachments, estimate: row.estimate || estimateChange(row.title,row.description), usage, status, issue_url: issue.html_url, pr_url: prUrl }
       } catch { return { ...row, attachments, status: 'status_unavailable' } }
     }))
-    return Response.json({ requests, isAdmin }, { headers: { 'Cache-Control': 'no-store' } })
+    return Response.json({ requests: requests.map(row => requestForViewer(row, canViewLinks)), isAdmin, canViewRepositoryLinks: canViewLinks }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) { return requestError(error) }
 }

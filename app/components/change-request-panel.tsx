@@ -17,6 +17,7 @@ export default function ChangeRequestPanel() {
   const [description, setDescription] = useState('')
   const [requests, setRequests] = useState<ChangeRequest[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canViewLinks, setCanViewLinks] = useState(false)
   const [quote, setQuote] = useState<{estimate:CostEstimate;token:string;autoApproved:boolean}|null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -30,7 +31,7 @@ export default function ChangeRequestPanel() {
       const response = await fetch('/api/change-requests', { cache: 'no-store' })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to load requests.')
-      setRequests(data.requests); setIsAdmin(data.isAdmin)
+      setRequests(data.requests); setIsAdmin(data.isAdmin); setCanViewLinks(data.canViewRepositoryLinks === true)
 
     } catch (error) { setError(error instanceof Error ? error.message : 'Unable to load requests.') }
   }, [])
@@ -148,11 +149,11 @@ export default function ChangeRequestPanel() {
       {message && <p className="change-request-success" role="status">{message}</p>}
       <div className="change-request-list-heading"><h3>{isAdmin ? 'Recent requests' : 'Your requests'}</h3><button onClick={() => void load()} disabled={busy}>Refresh</button></div>
       {!requests.length && <p>No requests yet. Your first idea starts here.</p>}
-      <ul className="change-request-list">{requests.map(item => <li key={item.id}><strong>{item.title}</strong><small>{item.kind==='suggestion'?'Suggestion':'Feature or fix'}</small><span className="change-request-status">{labels[item.status] || item.status}</span>
+      <ul className="change-request-list">{requests.map(item => <li key={item.id}><strong>{item.title}</strong><small>{item.kind==='suggestion'?'Suggestion':'Feature or fix'}</small><span className="change-request-status" role="status">Status: {labels[item.status] || item.status}</span>
         {item.estimate && <small>Planning range: ${item.estimate.usd[0].toFixed(2)}–${item.estimate.usd[1].toFixed(2)} · {item.estimate.model}<br/>Estimated input: {item.estimate.input.map(n=>n.toLocaleString()).join('–')} / output: {item.estimate.output.map(n=>n.toLocaleString()).join('–')} tokens</small>}
         {item.usage?.some(u=>u.available) ? <small>Recorded usage ({item.usage.length} run{item.usage.length===1?'':'s'}): {item.usage.reduce((n,u)=>n+u.input,0).toLocaleString()} input / {item.usage.reduce((n,u)=>n+u.output,0).toLocaleString()} output tokens · calculated API cost ${item.usage.reduce((n,u)=>n+u.usd,0).toFixed(4)}{item.usage.some(u=>!u.complete) ? ' · incomplete usage; total cost may be higher' : ''}</small> : <small>Actual token usage: {item.usage?.length ? 'unavailable; API charges may still apply.' : 'not reported yet.'}</small>}
         {Boolean(item.attachments?.length)&&<ul className="request-reference-links">{item.attachments?.map(file=><li key={file.id}>{file.url&&<a href={file.url} target="_blank" rel="noreferrer">{file.mime.startsWith('image/')&&<img src={file.url} alt={`Reference: ${file.name}`}/>}<span>{file.name} ↗</span></a>}</li>)}</ul>}
-        <div className="change-request-links">{item.issue_url && <a href={item.issue_url} target="_blank" rel="noreferrer">View request ↗</a>}{item.pr_url && <a href={item.pr_url} target="_blank" rel="noreferrer">Review PR ↗</a>}
+        <div className="change-request-links">{canViewLinks && item.issue_url && <a href={item.issue_url} target="_blank" rel="noreferrer">View request ↗</a>}{canViewLinks && item.pr_url && <a href={item.pr_url} target="_blank" rel="noreferrer">Review PR ↗</a>}
           {['saved', 'github_pending'].includes(item.status) && <button disabled={busy} onClick={() => void submit(item)}>Retry publication</button>}
           {isAdmin && item.status==='failed' && Boolean(item.attachments?.length) && <button disabled={busy} onClick={()=>void renewReferences(item.id)}>Renew attachment links</button>}
           {isAdmin && item.status === 'awaiting_authorization' && <button disabled={busy} onClick={() => void authorize(item)}>Approve estimate & implement</button>}</div>
