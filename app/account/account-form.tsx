@@ -12,6 +12,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
   const [fullname, setFullname] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
   const [website, setWebsite] = useState<string | null>(null)
+  const [mobilePhone, setMobilePhone] = useState<string | null>(null)
   const [avatar_url, setAvatarUrl] = useState<string | null>(null)
 
   const getProfile = useCallback(async () => {
@@ -40,6 +41,9 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         setWebsite(data.website)
         setAvatarUrl(data.avatar_url)
       }
+
+      const { data: userData } = await supabase.auth.getUser()
+      setMobilePhone(userData.user?.user_metadata?.mobile_phone ?? null)
     } catch (error) {
       alert('Error loading user data!')
     } finally {
@@ -55,11 +59,13 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
     username,
     website,
     avatar_url,
+    mobile_phone,
   }: {
     username: string | null
     fullname: string | null
     website: string | null
     avatar_url: string | null
+    mobile_phone: string | null
   }) {
     try {
       if (!claims?.sub) {
@@ -78,6 +84,12 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         updated_at: new Date().toISOString(),
       })
       if (error) throw error
+
+      const { error: mobilePhoneError } = await supabase.auth.updateUser({
+        data: { mobile_phone: mobile_phone || null },
+      })
+      if (mobilePhoneError) throw mobilePhoneError
+
       setDirty(false)
       alert('Profile updated!')
     } catch (error) {
@@ -95,7 +107,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         size={150}
         onUpload={(url) => {
           setAvatarUrl(url)
-          updateProfile({ fullname, username, website, avatar_url: url })
+          updateProfile({ fullname, username, website, avatar_url: url, mobile_phone: mobilePhone })
         }}
       />
       <div>
@@ -129,11 +141,21 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
           onChange={(e) => { setWebsite(e.target.value); setDirty(true) }}
         />
       </div>
+      <div>
+        <label htmlFor="mobilePhone">Mobile phone number</label>
+        <input
+          id="mobilePhone"
+          type="tel"
+          autoComplete="tel"
+          value={mobilePhone || ''}
+          onChange={(e) => { setMobilePhone(e.target.value); setDirty(true) }}
+        />
+      </div>
 
       <div>
         <button
           className="button primary block"
-          onClick={() => updateProfile({ fullname, username, website, avatar_url })}
+          onClick={() => updateProfile({ fullname, username, website, avatar_url, mobile_phone: mobilePhone })}
           disabled={loading || !claims?.sub}
         >
           {loading ? 'Loading ...' : 'Update'}
