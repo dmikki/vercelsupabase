@@ -2,9 +2,26 @@ export function allowedPath(path) {
   if (path.includes('..') || path.startsWith('/') || path.includes('\\')) return false
   if (!/^(app|lib|public|tests)\//.test(path)) return false
   if (/^(lib\/supabase\/|app\/auth\/|app\/login\/actions\.)/.test(path)) return false
-  if (/^(app\/api\/(change-requests|version)(\/|$)|app\/components\/(change-request-panel|release-updater)\.|lib\/(change-request|development-github))/.test(path)) return false
+  if (/^(app\/api\/|app\/components\/(change-request-panel|release-updater)\.|lib\/(change-request|development-github))/.test(path)) return false
+  // Route handlers and proxies run on the server with access to secrets, wherever they live.
+  if (/(^|\/)(route|proxy|middleware)\.[^/]+$/.test(path)) return false
   if (/(^|\/)\.[^/]+/.test(path)) return false
   return /\.(tsx?|jsx?|mjs|css|json|svg|png|jpe?g|webp|md)$/.test(path)
+}
+
+// Generated code must not read server secrets, add server actions, or import privileged server modules.
+const forbiddenPatterns = [
+  [/\bprocess\s*(\.|\[)/, 'reads process environment'],
+  [/['"]use server['"]/, 'adds a server action'],
+  [/['"][^'"]*(change-requests-server|change-request-[\w-]*-server|development-github|supabase-js)['"]/, 'imports a privileged server module'],
+]
+
+export function forbiddenAddition(patch) {
+  for (const line of patch.split('\n')) {
+    if (!line.startsWith('+') || line.startsWith('+++')) continue
+    for (const [pattern, reason] of forbiddenPatterns) if (pattern.test(line)) return reason
+  }
+  return null
 }
 
 export function approvalSha(body) {

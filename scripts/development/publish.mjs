@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { readFile, lstat } from 'node:fs/promises'
-import { allowedPath } from './policy.mjs'
+import { allowedPath, forbiddenAddition } from './policy.mjs'
 import { api, label, removeLabel } from './github.mjs'
 
 const number = Number(process.env.ISSUE_NUMBER)
@@ -13,6 +13,8 @@ git(['apply','--check','--index',patchPath])
 git(['apply','--index',patchPath])
 const changed = git(['diff','--cached','--name-only','-z']).split('\0').filter(Boolean)
 if (!changed.length || changed.length > 40 || changed.some(path => !allowedPath(path))) throw new Error(`Patch changes protected files or exceeds 40 files: ${changed.filter(path=>!allowedPath(path)).join(', ') || changed.length}`)
+const forbidden = forbiddenAddition(git(['diff','--cached','--no-ext-diff','--no-textconv','-U0']))
+if (forbidden) throw new Error(`Patch ${forbidden}; this needs manual engineering`)
 const entries = []
 for (const path of changed) {
   const status = git(['diff','--cached','--name-status','--',path])

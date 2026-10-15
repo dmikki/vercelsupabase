@@ -1,8 +1,8 @@
 import { ownedAttachments, attachmentContext } from '@/lib/change-request-attachments-server'
 import { requestContext, requestAdmin, requestError } from '@/lib/change-requests-server'
 import { parseChangeRequest } from '@/lib/change-request-validation'
-import { estimateChange, mayAutoApprove } from '@/lib/change-request-cost'
-import { signEstimate, spendingPolicy, estimateWithReferences } from '@/lib/change-request-estimates-server'
+import { mayAutoApprove } from '@/lib/change-request-cost'
+import { signEstimate, estimateWithReferences } from '@/lib/change-request-estimates-server'
 export async function POST(request: Request) {
   try {
     const {user,isAdmin} = await requestContext(request)
@@ -22,7 +22,6 @@ export async function POST(request: Request) {
     if(owner!==user.id&&files.some(file=>file.request_id!==input.id))throw Error('Only submitted request attachments can be estimated by an administrator.')
     const context=attachmentContext(files,input.kind)
     const estimate = estimateWithReferences(input.title,input.description,context)
-    const threshold = await spendingPolicy()
-    return Response.json({estimate,token:signEstimate(user.id,input.title,input.description,context),isAdmin,autoApproved:mayAutoApprove(isAdmin,true,estimate,threshold)}, {headers:{'Cache-Control':'no-store'}})
+    return Response.json({estimate,token:signEstimate(user.id,input.title,input.description,context),isAdmin,autoApproved:mayAutoApprove(isAdmin,true,estimate)}, {headers:{'Cache-Control':'no-store'}})
   } catch(error) { return requestError(error) }
 }

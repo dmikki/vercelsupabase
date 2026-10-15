@@ -1,4 +1,3 @@
-import {hasAutomaticApproval} from './auto-policy.mjs'
 import { readFile } from 'node:fs/promises'
 import { approvalSha, checksPass } from './policy.mjs'
 import { api, allPages } from './github.mjs'
@@ -16,9 +15,8 @@ const reviewed = latest?.state === 'APPROVED' && latest.commit_id === pr.head.sh
 const latestCommand = comments.filter(c => c.user.login === owner && (approvalSha(c.body) || c.body.trim() === '/reject')).at(-1)
 const commanded = latestCommand && approvalSha(latestCommand.body) === pr.head.sha
 const rejected = latestCommand?.body.trim() === '/reject' || latest?.state === 'CHANGES_REQUESTED'
+if(rejected||(!reviewed&&!commanded)){console.log('Waiting for owner approval of the current commit.');process.exit(0)}
 const { check_runs: checks } = await api(`/commits/${pr.head.sha}/check-runs?per_page=100`, 'GET', undefined, process.env.GH_CHECKS_TOKEN)
-const automated=checks.some(check=>hasAutomaticApproval(check,pr.head.sha))
-if(rejected||(!reviewed&&!commanded&&!automated)){console.log('Waiting for owner approval: no qualifying below-$1 CI attestation.');process.exit(0)}
 const statuses = await api(`/commits/${pr.head.sha}/statuses?per_page=100`)
 const base = await api('/git/ref/heads/main')
 const latestPr = await api(`/pulls/${number}`)
@@ -37,4 +35,4 @@ if (!checksPass(checks,statuses,'Development CI',pr.head.sha,base.object.sha)) {
 }
 const merged = await api(`/pulls/${number}/merge`,'PUT',{ sha:pr.head.sha, merge_method:'squash' })
 if (!merged.merged) throw new Error('GitHub did not merge the PR')
-await api(`/issues/${number}/comments`,'POST',{ body:`${automated?'Automatically approved below-$1':'Owner-approved'} commit ${pr.head.sha} merged as ${merged.sha}. Vercel will deploy main; the app detects the new version after successful deployment.` })
+await api(`/issues/${number}/comments`,'POST',{ body:`Owner-approved commit ${pr.head.sha} merged as ${merged.sha}. Vercel will deploy main; the app detects the new version after successful deployment.` })

@@ -90,7 +90,7 @@ export default function ChangeRequestPanel() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to submit request.')
       if (!existing) { setTitle(''); setDescription(''); setAttachments([]);draftId.current=null;setQuote(null); requestId.current = null }
-      setMessage('Request saved. Eligible estimates below $1 proceed automatically through implementation, checks, merge and deployment. Follow progress below.'); await load()
+      setMessage(isAdmin ? 'Request saved. Codex will open a PR; it merges only after you approve it. Follow progress below.' : 'Request saved. The administrator will review it before any work starts. Follow progress below.'); await load()
     } catch (error) { setError(error instanceof Error ? error.message : 'Unable to submit request.') }
     finally { setBusy(false) }
   }
@@ -140,11 +140,11 @@ export default function ChangeRequestPanel() {
         <p>{quote.estimate.scope} · {quote.estimate.model}</p>
         <p>Input: {quote.estimate.input.map(n=>n.toLocaleString()).join('–')} tokens<br/>Output: {quote.estimate.output.map(n=>n.toLocaleString()).join('–')} tokens</p>
         <small>{quote.estimate.assumptions} Rates checked {quote.estimate.pricing.date}. <a href={quote.estimate.pricing.source} target="_blank" rel="noreferrer">Pricing ↗</a></small>
-        <p>{quote.estimate.manualOnly ? 'This scope needs manual engineering; submitting will not launch Codex.' : quote.autoApproved ? 'Accepting this estimate starts Codex automatically. Code still requires GitHub approval.' : 'Your request will wait for administrator spending approval.'}</p>
+        <p>{quote.estimate.manualOnly ? 'This scope needs manual engineering; submitting will not launch Codex.' : quote.autoApproved ? 'Accepting this estimate starts Codex. The resulting PR still needs owner approval before it merges.' : 'Your request will wait for administrator approval.'}</p>
         <button className="button primary block" disabled={busy} onClick={()=>void submit()}>{quote.autoApproved ? 'Approve estimate & implement' : 'Submit with estimate'}</button>
         <button disabled={busy} onClick={()=>setQuote(null)}>Cancel estimate</button>
       </div>}
-      <details className="change-request-estimate"><summary>Automatic approval policy: below $1</summary><p>If the estimate’s upper end is below $1, submitting starts Codex automatically and passing code merges after CI and the Vercel preview succeed. Estimates of $1 or more require manual approval. Estimates are not billing caps.</p></details>
+      <details className="change-request-estimate"><summary>Approval policy</summary><p>Only the administrator can start implementation. Every change is reviewed and approved by the owner before it merges and deploys, after CI and the Vercel preview succeed. Estimates are not billing caps.</p></details>
       {error && <p className="change-request-error" role="alert">{error}</p>}
       {message && <p className="change-request-success" role="status">{message}</p>}
       <div className="change-request-list-heading"><h3>{isAdmin ? 'Recent requests' : 'Your requests'}</h3><button onClick={() => void load()} disabled={busy}>Refresh</button></div>

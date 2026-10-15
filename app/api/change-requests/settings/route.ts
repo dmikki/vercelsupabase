@@ -7,6 +7,6 @@ export async function POST(request:Request) {
   try {
     const {isAdmin}=await requestContext(request)
     if(!isAdmin)return Response.json({error:'Administrator only.'},{status:403})
-    return Response.json({error:'Automatic implementation and merge currently use a fixed threshold below $1. Policy changes require a repository configuration change.'},{status:409})
+    return Response.json({error:'Only administrators can start implementation, and every merge requires owner approval. Policy changes require a repository configuration change.'},{status:409})
   }catch(error){return requestError(error)}
 }

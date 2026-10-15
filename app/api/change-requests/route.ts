@@ -4,7 +4,7 @@ import {ATTACHMENT_BUCKET} from '@/lib/change-request-attachments'
 import { requestContext, requestAdmin, requestError } from '@/lib/change-requests-server'
 import { ensureRequestIssue, github, type GitHubIssue, type GitHubPull } from '@/lib/development-github'
 import { estimateChange, mayAutoApprove, tokenCost, MODEL } from '@/lib/change-request-cost'
-import { verifyEstimate, spendingPolicy } from '@/lib/change-request-estimates-server'
+import { verifyEstimate } from '@/lib/change-request-estimates-server'
 import { parseChangeRequest } from '@/lib/change-request-validation'
 
 export const runtime = 'nodejs'
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const context=attachmentContext(files,input.kind)
     const estimate = verifyEstimate(parsed.estimateToken,user.id,input.title,input.description,context)
     const fingerprint=context+JSON.stringify(estimate)
-    const autoApproved = mayAutoApprove(isAdmin,parsed.acceptEstimate === true,estimate,await spendingPolicy())
+    const autoApproved = mayAutoApprove(isAdmin,parsed.acceptEstimate === true,estimate)
     const admin = requestAdmin()
     const { error } = await supabase.rpc('submit_change_request', {
       request_id: input.id, request_title: input.title, request_description: input.description,

@@ -7,14 +7,13 @@ test('cost includes cached input once and rejects invalid usage',()=>{
  assert.equal(tokenCost(1000000,1000000,0),0.075)
  assert.throws(()=>tokenCost(10,11,0));assert.throws(()=>tokenCost(-1,0,0))
 })
-test('only explicit admin acceptance or enabled threshold authorizes eligible work',()=>{
+test('only explicit admin acceptance authorizes eligible work',()=>{
  const small=estimateChange('Welcome heading','Add a welcome heading to the account page.')
- assert.equal(mayAutoApprove(true,false,small,0),false)
- assert.equal(mayAutoApprove(true,true,small,0),true)
- assert.equal(mayAutoApprove(false,true,small,0),false)
- assert.equal(mayAutoApprove(false,false,small,small.usd[1]),false)
- assert.equal(mayAutoApprove(false,false,small,small.usd[1]+0.01),true)
- assert.equal(mayAutoApprove(true,true,estimateChange('Schema change','Add a database schema migration for this feature.'),100),false)
+ assert.equal(mayAutoApprove(true,false,small),false)
+ assert.equal(mayAutoApprove(true,true,small),true)
+ assert.equal(mayAutoApprove(false,true,small),false)
+ assert.equal(mayAutoApprove(false,false,small),false)
+ assert.equal(mayAutoApprove(true,true,estimateChange('Schema change','Add a database schema migration for this feature.')),false)
 })
 test('usage aggregates completion events and ignores embedded agent text',()=>{
  const event='{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":50,"output_tokens":20}}'

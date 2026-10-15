@@ -19,6 +19,7 @@ export function estimateChange(title: string, description: string, attachmentRes
     manualOnly: complex, assumptions: 'Heuristic planning range for one run in this example app, including repeated context and reasoning. No cache discount assumed. Not a quote or spending cap. Retries and revisions can add cost; excludes hosting, GitHub minutes, taxes and provider adjustments.' }
 }
 export type CostEstimate = ReturnType<typeof estimateChange>
-export function mayAutoApprove(isAdmin: boolean, accepted: boolean, estimate: CostEstimate, threshold: number) {
-  return !estimate.manualOnly && ((isAdmin && accepted) || (Number.isFinite(threshold) && threshold > 0 && estimate.usd[1] < threshold))
+// Only an administrator's explicit acceptance starts Codex; requests from other users wait for authorization.
+export function mayAutoApprove(isAdmin: boolean, accepted: boolean, estimate: CostEstimate) {
+  return !estimate.manualOnly && isAdmin && accepted
 }

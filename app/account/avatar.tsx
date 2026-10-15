@@ -48,9 +48,10 @@ export default function Avatar({
         throw new Error('You must select an image to upload.')
       }
 
+      if (!uid) throw new Error('You must be logged in to upload an avatar.')
       const file = event.target.files[0]
       const fileExt = file.name.split('.').pop()
-      const filePath = `${uid}-${Math.random()}.${fileExt}`
+      const filePath = `${uid}/${crypto.randomUUID()}.${fileExt}`
 
       const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file)
 
