@@ -13,6 +13,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
   const [username, setUsername] = useState<string | null>(null)
   const [website, setWebsite] = useState<string | null>(null)
   const [mobilePhone, setMobilePhone] = useState<string | null>(null)
+  const [companyName, setCompanyName] = useState<string | null>(null)
   const [avatar_url, setAvatarUrl] = useState<string | null>(null)
 
   const getProfile = useCallback(async () => {
@@ -26,7 +27,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
 
       const { data, error, status } = await supabase
         .from('profiles')
-        .select(`full_name, username, website, avatar_url, mobile_phone`)
+        .select(`full_name, username, website, avatar_url, mobile_phone, company_name`)
         .eq('id', claims.sub)
         .single()
 
@@ -41,6 +42,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         setWebsite(data.website)
         setAvatarUrl(data.avatar_url)
         setMobilePhone(data.mobile_phone)
+        setCompanyName(data.company_name)
       }
 
     } catch (error) {
@@ -81,6 +83,7 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         website,
         avatar_url,
         mobile_phone: mobile_phone?.trim() || null,
+        company_name: companyName?.trim() || null,
         updated_at: new Date().toISOString(),
       })
       if (error) throw error
@@ -144,6 +147,17 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
           autoComplete="tel"
           value={mobilePhone || ''}
           onChange={(e) => { setMobilePhone(e.target.value); setDirty(true) }}
+        />
+      </div>
+      <div>
+        <label htmlFor="companyName">Company name</label>
+        <input
+          id="companyName"
+          type="text"
+          autoComplete="organization"
+          maxLength={120}
+          value={companyName || ''}
+          onChange={(e) => { setCompanyName(e.target.value); setDirty(true) }}
         />
       </div>
 

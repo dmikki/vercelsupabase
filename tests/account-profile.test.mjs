@@ -13,3 +13,9 @@ test('account profile omits duplicate sign-out while the menu keeps it', () => {
   assert.equal(dashboardShellSource.includes('aria-hidden="true">♥</span> Request a change'), true)
   assert.equal(dashboardShellSource.includes('<span className="dashboard-card-icon">♥</span><h2>Request a change</h2>'), true)
 })
+
+test('account profile loads and saves the company name', () => {
+  assert.equal(accountFormSource.includes('htmlFor="companyName"'), true)
+  assert.match(accountFormSource, /select\(`[^`]*company_name[^`]*`\)/)
+  assert.equal(accountFormSource.includes('company_name: companyName?.trim() || null'), true)
+})
