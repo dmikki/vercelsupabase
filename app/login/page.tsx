@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { login, signup } from './actions'
+import SignupNotice from './signup-notice'
 
 const highlights = [
   'Use the same workspace identity as the dashboard.',
@@ -10,7 +11,9 @@ const highlights = [
 
 export default async function LoginPage({searchParams}: {searchParams: Promise<{message?: string; signup?: string}>}) {
   const {message, signup: signupStatus} = await searchParams
-  const signupMessage = signupStatus === 'success'
+  const signupMessage = signupStatus === 'existing'
+    ? 'Check your email for confirmation instructions if registration is pending. If you already confirmed your account, please log in.'
+    : signupStatus === 'success'
     ? 'Sign-up successful! Please log in with your email and password.'
     : signupStatus === 'confirm'
       ? 'Sign-up successful! Check your inbox (and spam folder) to confirm your email, then return here and log in.'
@@ -45,11 +48,11 @@ export default async function LoginPage({searchParams}: {searchParams: Promise<{
       <section className="login-card" aria-labelledby="login-heading">
         <div className="login-card-header">
           <span className="login-eyebrow">Secure access</span>
-          <h2 id="login-heading">Welcome back</h2>
+          <h2 id="login-heading">{signupStatus === 'confirm' ? 'Check your email' : signupMessage ? 'Your next step' : 'Welcome back'}</h2>
           <p>Use your email and password to continue.</p>
         </div>
 
-        {signupMessage && <p role="status" style={{padding: '12px 16px', border: '1px solid #3f6d55', borderRadius: 12, color: '#dff8ea'}}>{signupMessage}</p>}
+        {signupMessage && <SignupNotice confirmation={signupStatus === 'confirm'} existing={signupStatus === 'existing'} message={signupMessage} />}
         {message && <p role="alert">{message}</p>}
         <form className="login-form">
           <label htmlFor="email">Email address</label>
