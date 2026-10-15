@@ -8,7 +8,8 @@ const highlights = [
   'Keep the experience focused, simple, and quick to scan.',
 ]
 
-export default function LoginPage() {
+export default async function LoginPage({searchParams}: {searchParams: Promise<{message?: string}>}) {
+  const {message} = await searchParams
   return (
     <main className="login-shell">
       <section className="login-brand-panel">
@@ -43,6 +44,7 @@ export default function LoginPage() {
           <p>Use your email and password to continue.</p>
         </div>
 
+        {message && <p role="alert">{message}</p>}
         <form className="login-form">
           <label htmlFor="email">Email address</label>
           <input id="email" name="email" type="email" autoComplete="email" required />
