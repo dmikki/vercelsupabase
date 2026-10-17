@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { readFile, lstat } from 'node:fs/promises'
+import { readFile, lstat, readdir } from 'node:fs/promises'
 import { allowedPath, forbiddenAddition } from './policy.mjs'
+import { validateMigrationChanges } from './migration-policy.mjs'
 import { api, label, removeLabel } from './github.mjs'
 
 const number = Number(process.env.ISSUE_NUMBER)
@@ -13,6 +14,19 @@ git(['apply','--check','--index',patchPath])
 git(['apply','--index',patchPath])
 const changed = git(['diff','--cached','--name-only','-z']).split('\0').filter(Boolean)
 if (!changed.length || changed.length > 40 || changed.some(path => !allowedPath(path))) throw new Error(`Patch changes protected files or exceeds 40 files: ${changed.filter(path=>!allowedPath(path)).join(', ') || changed.length}`)
+// Migrations already on main are immutable; migrations introduced by this PR may be revised.
+const mainMigrations = (await api('/contents/supabase/migrations?ref=main')).map(file => `supabase/migrations/${file.name}`)
+const touchedMain = changed.filter(path => path.startsWith('supabase/migrations/') && mainMigrations.includes(path) && !git(['diff','--cached','--name-status','--',path]).startsWith('A\t'))
+if (touchedMain.length) throw new Error(`Existing migrations cannot be changed; add a new migration: ${touchedMain.join(', ')}`)
+const newMigrations = []
+for (const name of await readdir('supabase/migrations')) {
+  const path = `supabase/migrations/${name}`
+  if (!mainMigrations.includes(path)) newMigrations.push({ path, sql: await readFile(path,'utf8') })
+}
+if (newMigrations.length) {
+  const problems = validateMigrationChanges(newMigrations, mainMigrations)
+  if (problems.length) throw new Error(`Migration policy failed; this needs manual engineering: ${problems.join('; ')}`)
+}
 const forbidden = forbiddenAddition(git(['diff','--cached','--no-ext-diff','--no-textconv','-U0']))
 if (forbidden) throw new Error(`Patch ${forbidden}; this needs manual engineering`)
 const entries = []
@@ -40,7 +54,7 @@ if (process.env.REVISION_PR) {
 const branch = `codex/request-${number}-${process.env.GITHUB_RUN_ID}`
 await api('/git/refs','POST',{ ref:`refs/heads/${branch}`, sha:commit.sha })
 pr = await api('/pulls','POST',{ head:branch, base:'main', title:`Implement app request #${number}`,
-  body:`Closes #${number}\n\n${summary}\n\n## Approval\nReview the diff and Vercel preview. The owner may approve through GitHub Review → Approve (when the PR author is a different account), or comment:\n\n\`/approve ${commit.sha}\`\n\nMerge requires approval of the current commit, passing Development CI, and a successful Vercel preview. Database/infrastructure changes are excluded from this automated path.` })
+  body:`Closes #${number}\n\n${summary}\n\n## Approval\nReview the diff and Vercel preview. The owner may approve through GitHub Review → Approve (when the PR author is a different account), or comment:\n\n\`/approve ${commit.sha}\`\n\n${newMigrations.length ? `\n## Database changes\nThis PR adds ${newMigrations.length} additive migration(s): ${newMigrations.map(m=>`\`${m.path.split('/').pop()}\``).join(', ')}. They are tested on a local Supabase stack against existing data, applied to the staging database for the preview, and applied to production only after you approve, just before the merge.\n` : ''}\nA release readiness report is posted on this PR as tests complete. Merge requires approval of the current commit, passing Development CI, a verified staging preview, and a successful Vercel preview. Comment \`/remedy <what to change>\` to have Codex revise this PR, or \`/reject\` to stop it.` })
 await api(`/issues/${number}/comments`,'POST',{ body:`[app-request-pr] #${pr.number}\n\nImplementation ready: ${pr.html_url}` })
 }
 await removeLabel(number,'codex-running'); await label(number,'codex-ready')

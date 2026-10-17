@@ -13,7 +13,10 @@ test('only explicit admin acceptance authorizes eligible work',()=>{
  assert.equal(mayAutoApprove(true,true,small),true)
  assert.equal(mayAutoApprove(false,true,small),false)
  assert.equal(mayAutoApprove(false,false,small),false)
- assert.equal(mayAutoApprove(true,true,estimateChange('Schema change','Add a database schema migration for this feature.')),false)
+ assert.equal(mayAutoApprove(true,true,estimateChange('Payment change','Add payment processing with a new authentication provider.')),false)
+ const database=estimateChange('Track notes','Add a database table for private user notes and a form to save them.')
+ assert.equal(database.scope,'Database change (staged migration)')
+ assert.equal(mayAutoApprove(true,true,database),true)
 })
 test('usage aggregates completion events and ignores embedded agent text',()=>{
  const event='{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":50,"output_tokens":20}}'
