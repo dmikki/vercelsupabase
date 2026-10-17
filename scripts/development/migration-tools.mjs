@@ -31,7 +31,7 @@ function main(argv) {
     const base = args[0] || process.env.BASE_SHA
     if (!base) throw new Error('check needs a base ref')
     const { added, problems } = inspectMigrations(base)
-    setOutputs({ count: added.length, files: added.join(',') })
+    setOutputs({ count: added.length, files: added.join(','), problems: JSON.stringify(problems.slice(0, 6).map(problem => problem.slice(0, 300))) })
     console.log(JSON.stringify({ added, problems }, null, 2))
     if (problems.length) { console.error(`Migration policy failed:\n- ${problems.join('\n- ')}`); process.exitCode = 1 }
   } else if (command === 'guard') {

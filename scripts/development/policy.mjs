@@ -47,5 +47,8 @@ export function checksPass(runs, statuses, requiredName, expectedSha, baseSha, e
   const vercelChecks = runs.filter(run => run.app?.slug === 'vercel')
   if (!vercel.length && !vercelChecks.length) return false
   if (vercel.some(status => status.state !== 'success') || vercelChecks.some(run => run.status !== 'completed' || run.conclusion !== 'success')) return false
-  return [...latest.values()].every(status => status.state === 'success') && runs.every(run => run.status === 'completed' && ['success','neutral','skipped'].includes(run.conclusion))
+  // GitHub Actions job runs are aggregated into the named checks above, so only those named checks
+  // and checks from other apps (Vercel, security scanners) gate the merge.
+  const gating = runs.filter(run => run.app?.slug !== 'github-actions' || run.name === requiredName || extraRequired.includes(run.name))
+  return [...latest.values()].every(status => status.state === 'success') && gating.every(run => run.status === 'completed' && ['success','neutral','skipped'].includes(run.conclusion))
 }
