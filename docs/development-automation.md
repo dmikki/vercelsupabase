@@ -6,9 +6,70 @@ Logged-in users open **Request a change**, describe the requested behavior, and 
 
 Only an administrator identified by Supabase user ID can authorize implementation, either by accepting the estimate when submitting their own request or with **Approve estimate & implement** on another user's request. Alternatively, the repository owner adds `codex-approved` to the issue. Complex requests remain manual. The GitHub workflow runs Codex in a separate job without repository write credentials, validates its patch against allowed paths and forbidden content (environment access, server actions, privileged server imports), and publishes a branch and PR. Validation runs in a fresh runner without production or OpenAI secrets. Vercel builds a preview through the existing Git integration.
 
-Every PR requires the owner to review the PR and preview and approve the exact head commit; there is no automatic merge path. Owner rejection blocks merge. Merge also requires successful **Development CI**, validation against the current `main`, and a successful Vercel preview. Vercel then deploys `main`. Account pages poll the deployed version every minute and on window focus, reloading idle pages or presenting **Update now** when there are unsaved profile/request edits. Local and preview builds do not force refreshes. GitHub login may be required to open private issue/PR links.
+Every PR requires the owner to review the release readiness report and approve the exact head commit; there is no automatic merge path. Owner rejection blocks merge. Merge also requires successful **Development CI**, validation against the current `main`, a successful **Preview verification** against staging, and a successful Vercel preview. Production database migrations are applied just before the merge, then Vercel deploys `main`. Account pages poll the deployed version every minute and on window focus, reloading idle pages or presenting **Update now** when there are unsaved profile/request edits. Local and preview builds do not force refreshes. GitHub login may be required to open private issue/PR links.
 
 The request panel is a structured request interface with a chat icon, not a separate LLM chatbot. Clarifications can be added on the linked GitHub issue; Codex includes the last 20 comments when it runs. Status refreshes while the panel is open. GitHub status outages do not silently mark requests successful.
+
+## Release pipeline: test on staging, then approve for production
+
+Nothing reaches production until it has been tested on a separate staging environment and the owner has approved the exact commit. The administrator only has to read one report and choose: approve, remedy, reject, or roll back.
+
+```text
+request -> Codex PR -> automated tests -> staging database + Vercel preview -> verification
+        -> release readiness report on the PR -> owner approves -> production database -> merge -> Vercel deploy -> production verification
+```
+
+What runs automatically for every request PR:
+
+1. **Code checks** (`Development validation`): merge with current `main`, migration policy, types, lint, unit tests, production build.
+2. **Database upgrade test** (only when the PR adds migrations): `scripts/development/database-check.sh` builds the schema `main` has today on a throwaway local Supabase stack, loads existing data, applies only the new migrations, then proves the data survived, the security invariants hold (`integration/schema-invariants.sql`) and the integration tests pass (`integration/`: row-level security, request quota, private storage).
+3. **Staging database and preview verification** (`Preview verification`, runs when Vercel finishes the preview): brings the staging database to `main` plus the PR's migrations, runs the invariants and integration tests there, and smoke-tests the preview: right commit, Preview environment, connected to staging and **not** to the production database, Supabase reachable, login page renders, protected pages and APIs require login.
+4. **Release readiness report**: one bot comment on the PR (kept up to date) and a status line in the portal's change request list for the administrator. Verdicts: waiting, ready, blocked, setup required, approved.
+5. **Automatic repair**: if a check fails because of the change itself, Codex is asked once to repair the PR (never for missing setup). Everything is then tested again from scratch.
+
+Administrator options, as comments on the PR:
+
+| Command | Effect |
+| --- | --- |
+| `/approve <full commit SHA>` (or GitHub Review, Approve) | Releases that exact commit. Production database migrations are applied first, then the code merges and Vercel deploys. |
+| `/remedy <instructions>` | Codex revises the PR with your instructions; approval of the old commit no longer applies and all tests run again. |
+| `/reject` | Stops the release. |
+| `/rollback` (on the merged PR) | Opens a PR that reverts the release's code. It ships automatically after its own checks, with no second approval. |
+
+After deployment, `Production verification` checks that production serves the merged commit, is in the Production environment, uses the production database and passes the same smoke tests. The result is posted on the PR and shown in the portal. A failed verification tells you to comment `/rollback`; it never rolls back by itself.
+
+### How database changes are automated safely
+
+Codex may now add **new** migration files (`supabase/migrations/<timestamp>_<name>.sql`) when a request needs schema changes. `scripts/development/migration-policy.mjs` enforces, in the publish step, in CI, on staging and again before production:
+
+- Additive only: create tables, indexes, functions, policies, views; add columns (a `NOT NULL` column needs a default). No drop, rename, retype, `SET NOT NULL`, `UPDATE`, `DELETE`, `TRUNCATE`, `DO` blocks, extensions, roles, schemas other than `public`, or changes to `auth` or `storage` tables.
+- Every new table enables row level security in the same migration; policies name `authenticated` or `service_role`, never `using (true)`; grants only go to `authenticated` or `service_role`; `security definer` functions set `search_path`; views use `security_invoker`.
+- Existing migrations are immutable; new versions must be newer than the latest one on `main`; at most 3 per request.
+
+Because migrations are additive, production runs them **before** the merge: the version already live keeps working, the new version finds its schema, and a code rollback never needs a database rollback (rollback PRs deliberately keep the migration files). Requests that need anything the policy rejects stay manual engineering. The production step refuses to run if the database would apply any migration other than the ones in the approved PR (a sign its migration history drifted); see "Baseline" below.
+
+### One-time setup
+
+The pipeline fails closed: until this is configured the report shows **Setup required** and nothing merges.
+
+1. **Staging Supabase project.** Create a second Supabase project. It can start empty: every verification brings it up to `main`'s schema plus the PR's migrations (history entries left by abandoned PRs are repaired automatically). Staging is disposable and holds only test data.
+2. **Vercel environment variables.** In Vercel, scope the Supabase values per environment. Production: the production project's `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. **Preview: the staging project's values**, plus its own `ESTIMATE_SIGNING_SECRET` and `DEVELOPMENT_ADMIN_USER_IDS`. The preview check fails if a preview points at the production database.
+3. **Vercel Deployment Protection.** If previews are protected, create a Protection Bypass for Automation secret in Vercel and store it as `VERCEL_AUTOMATION_BYPASS_SECRET`.
+4. **GitHub repository variable** `PRODUCTION_SUPABASE_URL`: the production project URL (public value, used to prove isolation).
+5. **GitHub secrets** (repository secrets, or secrets of the `release-staging` and `release-production` environments, which GitHub creates on first use):
+
+| Secret | Environment | Value |
+| --- | --- | --- |
+| `STAGING_DATABASE_URL` | `release-staging` | Staging **Session pooler** connection string (GitHub runners have no IPv6, so not the direct host). |
+| `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_SUPABASE_SERVICE_ROLE_KEY` | `release-staging` | Staging project API URL and keys, used by the integration tests (they create and delete their own test users). |
+| `PRODUCTION_DATABASE_URL` | `release-production` | Production Session pooler connection string. Only used after owner approval. |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | either | Only if previews or production URLs are protected. |
+
+   Optionally add required reviewers to the `release-production` environment for a second click before production changes. The existing `AUTOMATION_GITHUB_TOKEN` also needs **Actions: read and write** to dispatch the revision and rollback workflows.
+6. **Baseline (only if production or staging were migrated by hand).** Supabase tracks applied migrations in `supabase_migrations.schema_migrations`. If you ran earlier migrations in the SQL editor, run **Actions, Baseline database migration history** once per database with the newest migration already applied and the word `BASELINE`. It records them as applied without running them. Otherwise the production guard stops the release and tells you so.
+7. Keep `main` protected as described below. Vercel's preview and production deployments must stay enabled so `deployment_status` events reach the verification workflows. If a PR predates this pipeline, run **Actions, Preview verification** manually with its number.
+
+Run the pipeline's database tests yourself with a local stack (`npx supabase start`): `BASE_SHA=$(git merge-base HEAD origin/main) npm run test:database`.
 
 ## One-time activation checklist
 
@@ -83,7 +144,7 @@ Without strict branch rules, the workflow checks current main before merging but
 
 ## Scope and failure behavior
 
-- Automated requests may modify application code and tests only. Automation infrastructure, authentication helpers, API routes and other route handlers, proxies, dependency/config changes, and database migrations are excluded by an enforced patch allowlist. Added lines that read `process.env`, declare `'use server'`, or import service-role/GitHub server modules are rejected. Requests requiring those changes stop for a separately reviewed engineering change.
+- Automated requests may modify application code and tests, and add new additive database migrations that satisfy `migration-policy.mjs`. Automation infrastructure, authentication helpers, API routes and other route handlers, proxies, dependency/config changes, and edits to existing migrations are excluded by an enforced patch allowlist. Added lines that read `process.env`, declare `'use server'`, or import service-role/GitHub server modules are rejected. Requests requiring those changes, or migrations the policy rejects, stop for a separately reviewed engineering change.
 - Codex has a 20-minute timeout. Failure labels and workflow links appear on the issue. Retry using Actions after resolving configuration or task issues. A generated PR may exist even if a later publication step failed; inspect branches/PRs before retrying.
 - Publish retries reconcile existing issues with the request UUID. Concurrent retries use a two-minute database lease. If reconciliation exceeds 1,000 issues, publishing stops rather than guessing and creating a duplicate.
 - GitHub issue and PR links do not expose Supabase UUIDs or email addresses. Request contents are sent to the private repository and to Codex for implementation.
@@ -93,7 +154,7 @@ Without strict branch rules, the workflow checks current main before merging but
 
 ## Rollback
 
-Use Vercel's previous successful deployment to restore service immediately. Then revert the offending merge through a reviewed GitHub PR so Git history matches the desired release. Verify Vercel's auto-assignment state after a rollback before promoting the next release. Database rollback is a separate explicit migration decision; the autonomous path does not execute schema changes.
+Comment `/rollback` on the merged PR. The pipeline opens a revert PR that keeps the migration files (the schema is additive and compatible with the previous code), tests it, and ships it without a second approval. For an immediate restore while that runs, use Vercel's previous successful deployment; verify Vercel's auto-assignment state afterwards. Database rollback is never automatic: a destructive change needs its own reviewed migration.
 
 ## Verification / first test
 

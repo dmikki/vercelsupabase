@@ -223,5 +223,5 @@ Supabase is open source. We'd love for you to follow along and get involved at h
 
 # Automated app change requests
 
-This repository includes a logged-in change-request panel and a Codex/GitHub/Vercel development workflow. See [development-automation.md](docs/development-automation.md) for activation, credentials, owner approval, revisions, validation, and rollback. Configure the migration and server environment before submitting requests.
+This repository includes a logged-in change-request panel and a Codex/GitHub/Vercel development workflow. See [development-automation.md](docs/development-automation.md) for activation, credentials, owner approval, revisions, validation, and rollback. Every change is tested on staging (database and preview) and shown in a release readiness report before the owner approves it for production; see the "Release pipeline" section there for the one-time setup. Configure the migration and server environment before submitting requests.
 

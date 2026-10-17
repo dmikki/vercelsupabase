@@ -21,10 +21,24 @@ const recorder = (failures = {}) => {
   return { calls, exec }
 }
 
-test('no migrations means the staging database is not touched', () => {
+test('without migrations staging is still brought up to main and tested, with no migration fetch', () => {
   const { calls, exec } = recorder()
-  assert.equal(stageDatabase({ migrations: [], headSha: 'a'.repeat(40), env, exec }).state, 'skipped')
-  assert.deepEqual(calls, [])
+  assert.equal(stageDatabase({ migrations: [], headSha: 'a'.repeat(40), env, exec, wait: () => {} }).state, 'success')
+  assert.deepEqual(calls.map(call => call.split(' ')[0]), ['supabase', 'psql', 'node'])
+})
+
+test('history left behind by abandoned pull requests is repaired and the push retried', () => {
+  const calls = []
+  let pushes = 0
+  const exec = (command, args) => {
+    calls.push([command, ...args].slice(0, 4).join(' '))
+    if (command === 'supabase' && args[0] === 'db' && ++pushes === 1) return { ok: false, output: 'supabase migration repair --status reverted 20261017000000 20269999999999\n' }
+    return { ok: true, output: '' }
+  }
+  const result = stageDatabase({ migrations: [], headSha: 'a'.repeat(40), env, exec, wait: () => {} })
+  assert.equal(result.state, 'success')
+  assert.match(result.log, /20261017000000, 20269999999999/)
+  assert.ok(calls.includes('supabase migration repair --status'))
 })
 
 test('missing staging credentials are a setup problem that names what is missing', () => {

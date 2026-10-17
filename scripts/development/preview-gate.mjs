@@ -14,30 +14,38 @@ function run(command, args, options = {}) {
   return { ok: result.status === 0, output: output.slice(-4000) }
 }
 
-// Applies this change's migrations to the staging database and proves the schema is healthy there.
+// Brings the staging database to "main plus this change" and proves the schema is healthy there.
 // Trusted scripts and tests come from main; only the migration SQL comes from the pull request.
+// Staging is shared and disposable: history entries left by abandoned pull requests are repaired away.
 export function stageDatabase({ migrations, headSha, env = process.env, exec = run, wait = seconds => run('sleep', [String(seconds)]) }) {
-  if (!migrations.length) return { state: 'skipped', log: 'No database changes.' }
   const missing = STAGING_SECRETS.filter(name => !env[name])
-  if (missing.length) return { state: 'setup', log: `Missing staging secrets: ${missing.join(', ')}. See docs/development-automation.md, "Environments".` }
+  if (missing.length) return { state: 'setup', log: `Missing staging secrets: ${missing.join(', ')}. See docs/development-automation.md, "One-time setup".` }
   const log = []
   const step = (name, result) => { log.push(`${result.ok ? 'PASS' : 'FAIL'} ${name}${result.ok ? '' : `\n${result.output}`}`); return result.ok }
-  if (!env.SKIP_MIGRATION_FETCH) {
-    if (!step('Fetch migrations from the pull request', exec('git', ['fetch', '--depth=1', 'origin', headSha]))) return { state: 'failure', log: log.join('\n') }
-    if (!step('Check out migrations', exec('git', ['checkout', headSha, '--', 'supabase/migrations']))) return { state: 'failure', log: log.join('\n') }
+  if (migrations.length) {
+    if (!env.SKIP_MIGRATION_FETCH) {
+      if (!step('Fetch migrations from the pull request', exec('git', ['fetch', '--depth=1', 'origin', headSha]))) return { state: 'failure', log: log.join('\n') }
+      if (!step('Check out migrations', exec('git', ['checkout', headSha, '--', 'supabase/migrations']))) return { state: 'failure', log: log.join('\n') }
+    }
+    let problems = []
+    try { problems = inspectMigrations('HEAD').problems } catch (error) { problems = [error.message] }
+    log.push(problems.length ? `FAIL Migration policy\n${problems.join('\n')}` : 'PASS Migration policy')
+    if (problems.length) return { state: 'failure', log: log.join('\n') }
   }
-  let problems = []
-  try { problems = inspectMigrations('HEAD').problems } catch (error) { problems = [error.message] }
-  log.push(problems.length ? `FAIL Migration policy\n${problems.join('\n')}` : 'PASS Migration policy')
-  if (problems.length) return { state: 'failure', log: log.join('\n') }
   const stagingEnv = { ...env, SUPABASE_URL: env.STAGING_SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY: env.STAGING_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY: env.STAGING_SUPABASE_SERVICE_ROLE_KEY }
-  // Concurrent pull requests share one staging database; retry briefly if another run holds the migration lock.
+  const push = () => exec('supabase', ['db', 'push', '--db-url', env.STAGING_DATABASE_URL, '--include-all', '--skip-vault'], { env })
   let pushed = { ok: false, output: '' }
   for (let attempt = 1; attempt <= 3 && !pushed.ok; attempt++) {
+    // Concurrent pull requests share one staging database; retry briefly if another run holds the migration lock.
     if (attempt > 1) wait(30)
-    pushed = exec('supabase', ['db', 'push', '--db-url', env.STAGING_DATABASE_URL, '--include-all', '--skip-vault'], { env })
+    pushed = push()
+    const orphaned = /migration repair --status reverted((?: \d{14})+)/.exec(pushed.output)?.[1]?.trim().split(' ')
+    if (!pushed.ok && orphaned) {
+      log.push(`Repairing staging history left by abandoned pull requests: ${orphaned.join(', ')}`)
+      if (exec('supabase', ['migration', 'repair', '--status', 'reverted', ...orphaned, '--db-url', env.STAGING_DATABASE_URL], { env }).ok) pushed = push()
+    }
   }
-  const ok = step('Apply migrations to staging', pushed)
+  const ok = step('Bring staging up to date with main and this change', pushed)
     && step('Security invariants on staging', exec('psql', [env.STAGING_DATABASE_URL, '-v', 'ON_ERROR_STOP=1', '-f', 'integration/schema-invariants.sql'], { env }))
     && step('Integration tests on staging', exec('node', ['--test', 'integration/*.test.mjs'], { env: stagingEnv }))
   return { state: ok ? 'success' : 'failure', log: log.join('\n') }

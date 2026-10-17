@@ -38,8 +38,8 @@ export function buildReadiness({ sha, base, migrations = [], ci, preview, vercel
     add('preview', 'Staging preview verification', 'skipped', 'Rollback returns to previously verified code')
   } else {
     const verified = checkState(preview)
-    const staging = verified === 'pending' ? 'pending' : stateOf(previewGates.staging || (verified === 'success' ? (migrations.length ? 'success' : 'skipped') : 'pending'))
-    add('staging', 'Staging database', staging, !migrations.length ? 'No database changes' : staging === 'success' ? 'Migrations applied and integration tests passed on staging' : '')
+    const staging = verified === 'pending' ? 'pending' : stateOf(previewGates.staging || (verified === 'success' ? 'success' : 'pending'))
+    add('staging', 'Staging database', staging, staging !== 'success' ? '' : migrations.length ? 'Migrations applied and integration tests passed on staging' : 'Schema is current with main and integration tests passed on staging')
     add('preview', 'Staging preview verification', verified === 'pending' ? 'pending' : stateOf(previewGates.preview || (verified === 'success' ? 'success' : 'failure')),
       verified === 'pending' ? 'Waiting for the Vercel preview to be verified' : '')
   }
