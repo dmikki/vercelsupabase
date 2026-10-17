@@ -161,6 +161,13 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .change-request-panel input[type=file]::file-selector-button { background: var(--ui-raised); color: var(--ui-text); border: 1px solid var(--ui-input-border); border-radius: 4px; padding: 5px 10px; margin-right: 10px; cursor: pointer; }
 .change-request-list { list-style: none; margin: 0; padding: 0; }.change-request-list>li { padding: 16px 0; border-top: 1px solid var(--ui-border); }.change-request-list strong { display: block; font-size: 14px; }
 .change-request-status { display: inline-block; font-size: 11px; background: var(--ui-hover); border: 1px solid var(--ui-border); border-radius: 4px; padding: 3px 7px; margin: 6px 0; color: var(--ui-muted); }
+.release-readiness { border: 1px solid var(--ui-border); border-left-width: 4px; border-radius: 6px; padding: 10px 12px; margin: 8px 0; background: var(--ui-surface); font-size: 12px; }
+.release-readiness[data-verdict="ready"], .release-readiness[data-verdict="approved"] { border-left-color: var(--ui-brand); }
+.release-readiness[data-verdict="blocked"], .release-readiness[data-verdict="setup"] { border-left-color: var(--ui-error); }
+.release-readiness ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.release-readiness li[data-state="failure"], .release-readiness li[data-state="setup"] { color: var(--ui-error); }
+.release-readiness li[data-state="pending"] { color: var(--ui-muted); }
+.release-production[data-ok="false"] { color: var(--ui-error); }
 .change-request-links { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
 .change-request-error { color: var(--ui-error); }.change-request-success { color: var(--ui-brand); }
 .change-request-estimate { padding: 16px; margin: 16px 0; border: 1px solid var(--ui-border); background: var(--ui-surface); border-radius: 6px; }

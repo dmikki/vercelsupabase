@@ -16,7 +16,7 @@ function run(command, args, options = {}) {
 
 // Applies this change's migrations to the staging database and proves the schema is healthy there.
 // Trusted scripts and tests come from main; only the migration SQL comes from the pull request.
-export function stageDatabase({ migrations, headSha, env = process.env, exec = run }) {
+export function stageDatabase({ migrations, headSha, env = process.env, exec = run, wait = seconds => run('sleep', [String(seconds)]) }) {
   if (!migrations.length) return { state: 'skipped', log: 'No database changes.' }
   const missing = STAGING_SECRETS.filter(name => !env[name])
   if (missing.length) return { state: 'setup', log: `Missing staging secrets: ${missing.join(', ')}. See docs/development-automation.md, "Environments".` }
@@ -31,7 +31,13 @@ export function stageDatabase({ migrations, headSha, env = process.env, exec = r
   log.push(problems.length ? `FAIL Migration policy\n${problems.join('\n')}` : 'PASS Migration policy')
   if (problems.length) return { state: 'failure', log: log.join('\n') }
   const stagingEnv = { ...env, SUPABASE_URL: env.STAGING_SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY: env.STAGING_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY: env.STAGING_SUPABASE_SERVICE_ROLE_KEY }
-  const ok = step('Apply migrations to staging', exec('supabase', ['db', 'push', '--db-url', env.STAGING_DATABASE_URL, '--include-all', '--skip-vault'], { env }))
+  // Concurrent pull requests share one staging database; retry briefly if another run holds the migration lock.
+  let pushed = { ok: false, output: '' }
+  for (let attempt = 1; attempt <= 3 && !pushed.ok; attempt++) {
+    if (attempt > 1) wait(30)
+    pushed = exec('supabase', ['db', 'push', '--db-url', env.STAGING_DATABASE_URL, '--include-all', '--skip-vault'], { env })
+  }
+  const ok = step('Apply migrations to staging', pushed)
     && step('Security invariants on staging', exec('psql', [env.STAGING_DATABASE_URL, '-v', 'ON_ERROR_STOP=1', '-f', 'integration/schema-invariants.sql'], { env }))
     && step('Integration tests on staging', exec('node', ['--test', 'integration/*.test.mjs'], { env: stagingEnv }))
   return { state: ok ? 'success' : 'failure', log: log.join('\n') }

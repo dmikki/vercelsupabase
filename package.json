@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:integration": "node --test integration/*.test.mjs",
+    "test:database": "bash scripts/development/database-check.sh"
   },
   "dependencies": {
     "@supabase/ssr": "0.10.2",
