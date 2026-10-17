@@ -1,0 +1,31 @@
+name: Roll back a release
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Merged pull request to undo
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: rollback-${{ inputs.pr_number }}
+  cancel-in-progress: false
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Create the rollback pull request
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: node scripts/development/rollback.mjs

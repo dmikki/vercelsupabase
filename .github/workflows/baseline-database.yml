@@ -1,0 +1,46 @@
+name: Baseline database migration history
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Database whose migration history should be baselined
+        required: true
+        type: choice
+        options: [production, staging]
+      through_version:
+        description: Mark every repository migration up to and including this 14-digit version as already applied
+        required: true
+        type: string
+      confirm:
+        description: Type BASELINE to confirm these migrations were already applied to that database by hand
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.target == 'staging' && 'release-staging' || 'release-production' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359
+        with:
+          version: 2.121.0
+      - name: Record already-applied migrations
+        env:
+          DATABASE_URL: ${{ inputs.target == 'staging' && secrets.STAGING_DATABASE_URL || secrets.PRODUCTION_DATABASE_URL }}
+          THROUGH: ${{ inputs.through_version }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          [ "$CONFIRM" = "BASELINE" ] || { echo "::error::Type BASELINE to confirm."; exit 1; }
+          [[ "$THROUGH" =~ ^[0-9]{14}$ ]] || { echo "::error::through_version must be a 14-digit migration version."; exit 1; }
+          [ -n "$DATABASE_URL" ] || { echo "::error::The database URL secret for this target is not configured."; exit 1; }
+          versions=$(ls supabase/migrations | grep -E '^[0-9]{14}_' | cut -d_ -f1 | awk -v max="$THROUGH" '$1 <= max')
+          [ -n "$versions" ] || { echo "::error::No repository migrations at or before $THROUGH."; exit 1; }
+          echo "Marking as applied: $(echo $versions | tr '\n' ' ')"
+          supabase migration repair --status applied $versions --db-url "$DATABASE_URL"
+          supabase migration list --db-url "$DATABASE_URL"

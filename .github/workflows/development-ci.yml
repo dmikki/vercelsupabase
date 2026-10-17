@@ -46,12 +46,55 @@ jobs:
           if (!Number.isSafeInteger(n) || n < 1) throw Error('Invalid PR')
           const pr = await api(`/pulls/${n}`)
           if (pr.head.repo.full_name !== process.env.GITHUB_REPOSITORY || pr.base.ref !== 'main' || pr.head.sha !== process.env.EXPECTED_SHA) throw Error('Unexpected PR target or outdated commit')
-          await appendFile(process.env.GITHUB_OUTPUT,`head=${pr.head.sha}\nbase=${pr.base.sha}\nnumber=${n}\ncodex=${pr.head.ref.startsWith('codex/request-')}\n`)
+          await appendFile(process.env.GITHUB_OUTPUT,`head=${pr.head.sha}\nbase=${pr.base.sha}\nnumber=${n}\ncodex=${pr.head.ref.startsWith('codex/request-')||pr.head.ref.startsWith('codex/rollback-')}\n`)
           JS
   test:
     needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      migrations: ${{ steps.migrations.outputs.count }}
+      files: ${{ steps.migrations.outputs.files }}
+      problems: ${{ steps.migrations.outputs.problems }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.resolve.outputs.head }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test proposed merge with current main
+        env:
+          BASE_SHA: ${{ needs.resolve.outputs.base }}
+        run: |
+          git config user.name 'Development validation'
+          git config user.email 'development-validation@users.noreply.github.com'
+          git -c core.hooksPath=/dev/null merge --no-edit "$BASE_SHA"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Database migration policy
+        id: migrations
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ needs.resolve.outputs.base }}
+        run: node scripts/development/migration-tools.mjs check "$BASE_SHA"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      - name: Enforce migration policy
+        if: steps.migrations.outcome == 'failure'
+        run: exit 1
+  database:
+    needs: [resolve, test]
+    # Runs whenever this change adds migrations, even if another check failed, so one run reports everything.
+    if: always() && needs.resolve.result == 'success' && needs.test.outputs.migrations != '' && needs.test.outputs.migrations != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -69,15 +112,15 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359
+        with:
+          version: 2.121.0
+      - name: Upgrade existing data through the new migrations, then run security and integration tests
         env:
-          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+          BASE_SHA: ${{ needs.resolve.outputs.base }}
+        run: bash scripts/development/database-check.sh
   record:
-    needs: [resolve, test]
+    needs: [resolve, test, database]
     if: always() && needs.resolve.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -95,7 +138,10 @@ jobs:
           BASE_SHA: ${{ needs.resolve.outputs.base }}
           PR_NUMBER: ${{ needs.resolve.outputs.number }}
           TEST_RESULT: ${{ needs.test.result }}
-          AUTO_MERGE: ${{ needs.resolve.outputs.codex }}
+          DATABASE_RESULT: ${{ needs.database.result }}
+          MIGRATION_FILES: ${{ needs.test.outputs.files }}
+          MIGRATION_PROBLEMS: ${{ needs.test.outputs.problems }}
+          AUTOMATED: ${{ needs.resolve.outputs.codex }}
         run: |
           node --input-type=module <<'JS'
           const api = async (path,method,body) => {
@@ -103,7 +149,13 @@ jobs:
             if(!r.ok) throw Error(`GitHub request failed: ${r.status}`)
             return r.status===204 ? undefined : r.json()
           }
-          const success = process.env.TEST_RESULT === 'success'
-          await api('/check-runs','POST',{name:'Development CI',head_sha:process.env.HEAD_SHA,status:'completed',conclusion:success?'success':'failure',output:{title:success?'Validation passed':'Validation failed',summary:`base:${process.env.BASE_SHA}\nTypeScript, tests, and production build against the proposed merge.`}})
-          if (success && process.env.AUTO_MERGE === 'true') await api('/actions/workflows/approve-and-merge.yml/dispatches','POST',{ref:'main',inputs:{pr_number:process.env.PR_NUMBER}})
+          const { TEST_RESULT: code, DATABASE_RESULT: database } = process.env
+          const success = code === 'success' && ['success','skipped'].includes(database)
+          let problems = []
+          try { problems = JSON.parse(process.env.MIGRATION_PROBLEMS || '[]') } catch {}
+          const gates = { code, database, migrations: (process.env.MIGRATION_FILES || '').split(',').filter(Boolean), problems }
+          const text = `Code checks (types, lint, unit tests, build): ${code}\nDatabase upgrade test: ${database === 'skipped' ? 'not needed, no database changes' : database}`
+          await api('/check-runs','POST',{name:'Development CI',head_sha:process.env.HEAD_SHA,status:'completed',conclusion:success?'success':'failure',output:{title:success?'Validation passed':'Validation failed',summary:`base:${process.env.BASE_SHA}\ngates:${JSON.stringify(gates)}`,text}})
+          // Re-evaluate on every result so the release report and automatic repair react to failures too.
+          if (process.env.AUTOMATED === 'true') await api('/actions/workflows/approve-and-merge.yml/dispatches','POST',{ref:'main',inputs:{pr_number:process.env.PR_NUMBER}})
           JS
