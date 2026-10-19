@@ -20,7 +20,7 @@ test('account profile loads and saves the company name', () => {
   assert.equal(accountFormSource.includes('company_name: companyName?.trim() || null'), true)
 })
 
-test('account page heading says your account', () => {
-  assert.equal(dashboardShellSource.includes("section==='profile'?'Your account'"), true)
+test('account page heading says business profile', () => {
+  assert.equal(dashboardShellSource.includes('<h2>Business Profile</h2>'), true)
   assert.equal(dashboardShellSource.includes("useState('profile')"), true)
 })
