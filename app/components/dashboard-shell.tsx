@@ -1,7 +1,7 @@
 'use client'
 import {useEffect,useRef,useState,type ReactNode} from 'react'
 export default function DashboardShell({email,name,environment,children}:{email:string;name:string;environment:string;children:ReactNode}) {
- const [section,setSection]=useState('overview'),[menu,setMenu]=useState(false),[mobile,setMobile]=useState(false)
+ const [section,setSection]=useState('profile'),[menu,setMenu]=useState(false),[mobile,setMobile]=useState(false)
  const [narrow,setNarrow]=useState(false)
  useEffect(()=>{const query=window.matchMedia('(max-width:700px)');const update=()=>setNarrow(query.matches);update();query.addEventListener('change',update);return()=>query.removeEventListener('change',update)},[])
  const profile=useRef<HTMLDivElement>(null)
@@ -24,7 +24,7 @@ export default function DashboardShell({email,name,environment,children}:{email:
      </div>
     </div>
    </header>
-   <main className="dashboard-content"><div className="dashboard-page-heading"><div><span className="dashboard-eyebrow">YOUR WORKSPACE</span><h1>{section==='profile'?'Profile settings':section==='suggestions'?'Make it better':section==='requests'?'Build the next improvement':'Welcome back'}</h1><p>{section==='profile'?'Manage your account details and profile photo.':'Manage your profile, share ideas, and review the next change to your app.'}</p></div><span className="dashboard-live"><span className="project-dot"/> Ready to build</span></div>
+   <main className="dashboard-content"><div className="dashboard-page-heading"><div><span className="dashboard-eyebrow">YOUR WORKSPACE</span><h1>{section==='profile'?'Your account':section==='suggestions'?'Make it better':section==='requests'?'Build the next improvement':'Welcome back'}</h1><p>{section==='profile'?'Manage your account details and profile photo.':'Manage your profile, share ideas, and review the next change to your app.'}</p></div><span className="dashboard-live"><span className="project-dot"/> Ready to build</span></div>
     {section!=='profile'&&<div className="dashboard-cards"><button onClick={()=>navigate('profile')}><span className="dashboard-card-icon">◎</span><h2>Your profile</h2><p>Keep your name, photo, and account details up to date.</p><span>Manage profile ↗</span></button><button onClick={()=>navigate('requests')}><span className="dashboard-card-icon">♥</span><h2>Request a change</h2><p>Attach a screenshot, estimate the cost, and turn an idea into a reviewed PR.</p><span>Start a request ↗</span></button><button onClick={()=>navigate('suggestions')}><span className="dashboard-card-icon">✧</span><h2>Suggest an improvement</h2><p>Share a reference or describe what would make this app more useful.</p><span>Share an idea ↗</span></button></div>}
     <section className="dashboard-profile-card"><div className="dashboard-section-heading"><div><h2>Account profile</h2><p>Your personal details in this workspace.</p></div><span>ACCOUNT</span></div>{children}</section>
    </main>

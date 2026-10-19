@@ -19,3 +19,8 @@ test('account profile loads and saves the company name', () => {
   assert.match(accountFormSource, /select\(`[^`]*company_name[^`]*`\)/)
   assert.equal(accountFormSource.includes('company_name: companyName?.trim() || null'), true)
 })
+
+test('account page heading says your account', () => {
+  assert.equal(dashboardShellSource.includes("section==='profile'?'Your account'"), true)
+  assert.equal(dashboardShellSource.includes("useState('profile')"), true)
+})
