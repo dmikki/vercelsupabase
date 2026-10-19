@@ -22,4 +22,5 @@ test('account profile loads and saves the company name', () => {
 
 test('account page heading says your account', () => {
   assert.equal(dashboardShellSource.includes("section==='profile'?'Your account'"), true)
+  assert.equal(dashboardShellSource.includes("useState('profile')"), true)
 })

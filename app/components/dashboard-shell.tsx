@@ -1,7 +1,7 @@
 'use client'
 import {useEffect,useRef,useState,type ReactNode} from 'react'
 export default function DashboardShell({email,name,environment,children}:{email:string;name:string;environment:string;children:ReactNode}) {
- const [section,setSection]=useState('overview'),[menu,setMenu]=useState(false),[mobile,setMobile]=useState(false)
+ const [section,setSection]=useState('profile'),[menu,setMenu]=useState(false),[mobile,setMobile]=useState(false)
  const [narrow,setNarrow]=useState(false)
  useEffect(()=>{const query=window.matchMedia('(max-width:700px)');const update=()=>setNarrow(query.matches);update();query.addEventListener('change',update);return()=>query.removeEventListener('change',update)},[])
  const profile=useRef<HTMLDivElement>(null)
