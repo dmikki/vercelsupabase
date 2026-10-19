@@ -2,10 +2,12 @@
 
 import {attachmentType,MAX_ATTACHMENTS} from '@/lib/change-request-attachments'
 import {AUTO_APPROVAL_LIMIT_USD,type CostEstimate } from '@/lib/change-request-cost'
+import { readinessSummary, type ProductionCheck, type Readiness } from '@/lib/release-readiness'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 type Attachment = {id:string;name:string;mime:string;size:number;url?:string}
-type ChangeRequest = { id: string; kind?:'change'|'suggestion'; attachments?:Attachment[]; title: string; description: string; status: string; created_at: string; estimate?: CostEstimate; usage?: { input:number; cached:number; output:number; usd:number; complete:boolean; available:boolean }[]; issue_url?: string; pr_url?: string }
+type ChangeRequest = { id: string; kind?:'change'|'suggestion'; attachments?:Attachment[]; title: string; description: string; status: string; created_at: string; estimate?: CostEstimate; usage?: { input:number; cached:number; output:number; usd:number; complete:boolean; available:boolean }[]; issue_url?: string; pr_url?: string; readiness?: Readiness | null; production?: ProductionCheck | null }
+const gateLabels: Record<string, string> = { success: 'passed', failure: 'failed', pending: 'waiting', skipped: 'not needed', setup: 'setup required' }
 const labels: Record<string, string> = { saved: 'Saved', publishing: 'Publishing to GitHub', github_pending: 'GitHub publication needs retry', submitted: 'Submitted', awaiting_authorization: 'Awaiting administrator', queued: 'Queued for Codex', implementing: 'Codex is implementing', review: 'Ready for review', merged: 'Merged · deployment pending', deployed: 'Deployed', failed: 'Implementation failed', closed: 'PR closed', status_unavailable: 'GitHub status unavailable' }
 
 export default function ChangeRequestPanel() {
@@ -144,12 +146,18 @@ export default function ChangeRequestPanel() {
         <button className="button primary block" disabled={busy} onClick={()=>void submit()}>{quote.autoApproved ? 'Approve estimate & implement' : 'Submit with estimate'}</button>
         <button disabled={busy} onClick={()=>setQuote(null)}>Cancel estimate</button>
       </div>}
-      <details className="change-request-estimate"><summary>Approval policy</summary><p>Only the administrator can start implementation. Every change is reviewed and approved by the owner before it merges and deploys, after CI and the Vercel preview succeed. Estimates are not billing caps.</p></details>
+      <details className="change-request-estimate"><summary>Approval policy</summary><p>Only the administrator can start implementation. Every change is tested automatically, including database changes on a staging copy, and approved by the owner before it merges and deploys to production. Estimates are not billing caps.</p></details>
       {error && <p className="change-request-error" role="alert">{error}</p>}
       {message && <p className="change-request-success" role="status">{message}</p>}
       <div className="change-request-list-heading"><h3>{isAdmin ? 'Recent requests' : 'Your requests'}</h3><button onClick={() => void load()} disabled={busy}>Refresh</button></div>
       {!requests.length && <p>No requests yet. Your first idea starts here.</p>}
       <ul className="change-request-list">{requests.map(item => <li key={item.id}><strong>{item.title}</strong><small>{item.kind==='suggestion'?'Suggestion':'Feature or fix'}</small><span className="change-request-status" role="status">Status: {labels[item.status] || item.status}</span>
+        {isAdmin && item.readiness && <div className="release-readiness" data-verdict={item.readiness.verdict}>
+          <strong>{readinessSummary(item.readiness).label}</strong>
+          <ul>{item.readiness.gates.filter(gate => gate.state !== 'skipped').map(gate => <li key={gate.id} data-state={gate.state}>{gate.name}: {gateLabels[gate.state] || gate.state}</li>)}</ul>
+          {canViewLinks && item.pr_url && <small>{item.readiness.verdict === 'ready' ? 'Approve, remedy or reject' : 'Details and options'} on the pull request: <a href={item.pr_url} target="_blank" rel="noreferrer">Open release report ↗</a></small>}
+        </div>}
+        {isAdmin && item.production && <small className="release-production" data-ok={item.production.ok}>Production: {item.production.ok ? 'released and verified.' : 'released but failed verification. Open the pull request and comment /rollback to undo it.'}</small>}
         {item.estimate && <small>Planning range: ${item.estimate.usd[0].toFixed(2)}–${item.estimate.usd[1].toFixed(2)} · {item.estimate.model}<br/>Estimated input: {item.estimate.input.map(n=>n.toLocaleString()).join('–')} / output: {item.estimate.output.map(n=>n.toLocaleString()).join('–')} tokens</small>}
         {item.usage?.some(u=>u.available) ? <small>Recorded usage ({item.usage.length} run{item.usage.length===1?'':'s'}): {item.usage.reduce((n,u)=>n+u.input,0).toLocaleString()} input / {item.usage.reduce((n,u)=>n+u.output,0).toLocaleString()} output tokens · calculated API cost ${item.usage.reduce((n,u)=>n+u.usd,0).toFixed(4)}{item.usage.some(u=>!u.complete) ? ' · incomplete usage; total cost may be higher' : ''}</small> : <small>Actual token usage: {item.usage?.length ? 'unavailable; API charges may still apply.' : 'not reported yet.'}</small>}
         {Boolean(item.attachments?.length)&&<ul className="request-reference-links">{item.attachments?.map(file=><li key={file.id}>{file.url&&<a href={file.url} target="_blank" rel="noreferrer">{file.mime.startsWith('image/')&&<img src={file.url} alt={`Reference: ${file.name}`}/>}<span>{file.name} ↗</span></a>}</li>)}</ul>}

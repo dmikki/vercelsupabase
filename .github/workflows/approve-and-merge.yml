@@ -16,13 +16,18 @@ on:
 permissions:
   contents: read
   checks: read
+  issues: write
+  pull-requests: write
 jobs:
-  merge:
+  # Phase 1 reads state only: it refreshes the release readiness report and decides which PRs may ship.
+  evaluate:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'status' || github.event_name == 'check_run' || github.event_name == 'pull_request_review' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     concurrency:
-      group: development-merge
+      group: development-evaluate-${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number || github.event.sha || github.event.check_run.head_sha }}
       cancel-in-progress: false
+    outputs:
+      ready: ${{ steps.evaluate.outputs.ready }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -31,27 +36,73 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
-      - name: Merge only owner-approved, validated commit
+      - id: evaluate
+        name: Refresh release readiness and decide what may merge
         env:
           GH_TOKEN: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
           GH_CHECKS_TOKEN: ${{ github.token }}
           DEVELOPMENT_REVIEWER: dmikki
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
+        run: node scripts/development/approve.mjs evaluate
+  # Phase 2 runs only for owner-approved, fully tested commits. Database changes go to production first
+  # (they are additive, so the running version keeps working), then the code merges and Vercel deploys.
+  release:
+    needs: evaluate
+    if: needs.evaluate.outputs.ready != '' && needs.evaluate.outputs.ready != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release-production
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.evaluate.outputs.ready) }}
+    concurrency:
+      group: production-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Validate the approved migrations
+        if: matrix.migrations != ''
+        env:
+          HEAD_SHA: ${{ matrix.sha }}
         run: |
-          if [ -n "$PR_NUMBER" ]; then
-            node scripts/development/approve.mjs
-          else
-            node --input-type=module <<'JS'
-            import { readFile } from 'node:fs/promises'
-            import { spawnSync } from 'node:child_process'
-            import { api } from './scripts/development/github.mjs'
-            const event=JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH,'utf8'))
-            const sha=event.sha || event.check_run?.head_sha
-            if (!/^[0-9a-f]{40}$/.test(sha || '')) process.exit(0)
-            const prs=await api(`/commits/${sha}/pulls`)
-            for(const pr of prs.filter(p=>p.state==='open' && p.head.ref.startsWith('codex/request-'))) {
-              const result=spawnSync('node',['scripts/development/approve.mjs'],{stdio:'inherit',env:{...process.env,PR_NUMBER:String(pr.number)}})
-              if(result.status) process.exitCode=result.status
-            }
-          JS
-          fi
+          git fetch --depth=1 origin "$HEAD_SHA"
+          git checkout "$HEAD_SHA" -- supabase/migrations
+          node scripts/development/migration-tools.mjs check HEAD
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359
+        if: matrix.migrations != ''
+        with:
+          version: 2.121.0
+      - name: Apply the migrations to production before the merge
+        if: matrix.migrations != ''
+        env:
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          MIGRATIONS: ${{ matrix.migrations }}
+        run: |
+          if [ -z "$PRODUCTION_DATABASE_URL" ]; then echo "::error::The PRODUCTION_DATABASE_URL secret is not configured, so database changes cannot be released."; exit 1; fi
+          supabase db push --db-url "$PRODUCTION_DATABASE_URL" --include-all --skip-vault --dry-run | tee "$RUNNER_TEMP/dry-run.txt"
+          node scripts/development/migration-tools.mjs guard "$RUNNER_TEMP/dry-run.txt" "$MIGRATIONS"
+          supabase db push --db-url "$PRODUCTION_DATABASE_URL" --include-all --skip-vault
+      - id: merge
+        name: Merge the approved, tested commit
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
+          GH_CHECKS_TOKEN: ${{ github.token }}
+          DEVELOPMENT_REVIEWER: dmikki
+          PR_NUMBER: ${{ matrix.number }}
+          EXPECTED_SHA: ${{ matrix.sha }}
+          PRODUCTION_MIGRATIONS: ${{ matrix.migrations }}
+        run: node scripts/development/approve.mjs merge
+      - name: Tell the administrator why the release stopped
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.number }}
+          COMMENT: "Release stopped before the merge. Open the workflow run for the reason: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Nothing was merged. If database migrations were already applied to production they are additive and safe; fix the cause and re-run this workflow, or comment `/remedy <instructions>`."
+        run: node scripts/development/comment.mjs

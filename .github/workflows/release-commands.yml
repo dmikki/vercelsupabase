@@ -1,0 +1,25 @@
+name: Release commands
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  command:
+    # Only the repository owner can request a remedy or a rollback.
+    if: github.event.issue.pull_request && github.event.comment.user.login == 'dmikki' && (startsWith(github.event.comment.body, '/remedy') || startsWith(github.event.comment.body, '/rollback'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Run the requested command
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}
+          DEVELOPMENT_REVIEWER: dmikki
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: node scripts/development/release-command.mjs

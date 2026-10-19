@@ -6,6 +6,7 @@ import { cached, ensureRequestIssue, forget, github, issueProgressKey, type GitH
 import { estimateChange, mayAutoApprove, tokenCost, MODEL } from '@/lib/change-request-cost'
 import { verifyEstimate } from '@/lib/change-request-estimates-server'
 import { parseChangeRequest } from '@/lib/change-request-validation'
+import { productionFromComments, readinessFromComments, type ProductionCheck, type Readiness } from '@/lib/release-readiness'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -64,9 +65,21 @@ async function issueProgress(number: number) {
   const comments = await github<{ body: string; user: { login: string; type: string } }[]>(`/issues/${issue.number}/comments?per_page=100`)
   const prNumber = comments.map(c => c.body.match(/^\[app-request-pr\] #(\d+)$/m)?.[1]).filter(Boolean).at(-1)
   let prUrl: string | undefined
+  let readiness: Readiness | null = null
+  let production: ProductionCheck | null = null
   if (prNumber) {
     const pr = await github<GitHubPull>(`/pulls/${prNumber}`)
     prUrl = pr.html_url
+    if (pr.state === 'open' || pr.merged_at) {
+      const prComments: { body?: string; user?: { type?: string } }[] = []
+      for (let page = 1; page <= 5; page++) {
+        const batch = await github<typeof prComments>(`/issues/${prNumber}/comments?per_page=100&page=${page}`)
+        prComments.push(...batch)
+        if (batch.length < 100) break
+      }
+      if (pr.merged_at) production = productionFromComments(prComments)
+      else readiness = readinessFromComments(prComments)
+    }
     if (pr.merged_at) status = 'merged'
     else if (pr.state === 'closed') status = 'closed'
     if (pr.merged_at && pr.merge_commit_sha && process.env.VERCEL_ENV === 'production' && process.env.VERCEL_GIT_COMMIT_SHA) {
@@ -81,7 +94,7 @@ async function issueProgress(number: number) {
     if (!match) continue
     try { const u = JSON.parse(match[1]); if (u.model !== MODEL || !/^\d+:\d+$/.test(u.run)) continue; const usd=tokenCost(u.input,u.cached,u.output); usageRuns.set(u.run,{input:u.input,cached:u.cached,output:u.output,usd,complete:u.complete===true,available:Number.isSafeInteger(u.turns)&&u.turns>0}) } catch { /* Invalid reports are ignored. */ }
   }
-  return { status, usage: [...usageRuns.values()], issue_url: issue.html_url, pr_url: prUrl }
+  return { status, usage: [...usageRuns.values()], issue_url: issue.html_url, pr_url: prUrl, readiness, production }
 }
 
 export async function GET() {

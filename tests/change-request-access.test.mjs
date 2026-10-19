@@ -15,3 +15,10 @@ test('non-admin request responses omit GitHub URLs and issue numbers while retai
  assert.equal(request.github_issue_number,17)
  assert.deepEqual(requestForViewer({status:'saved'},false),{status:'saved'})
 })
+
+test('release readiness and production results are visible only to administrators', async () => {
+  const { requestForViewer } = await import('../lib/change-request-access.ts')
+  const request = { id: 'a', status: 'review', pr_url: 'https://example.test/pull/1', readiness: { verdict: 'ready' }, production: { ok: true } }
+  assert.deepEqual(requestForViewer(request, false), { id: 'a', status: 'review' })
+  assert.equal(requestForViewer(request, true).readiness.verdict, 'ready')
+})
