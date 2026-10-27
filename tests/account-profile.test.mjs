@@ -30,6 +30,15 @@ test('account profile exposes a change password section and recovery notice', ()
   assert.equal(confirmRouteSource.includes("type === 'recovery'"), true)
 })
 
+test('change password lives in the profile menu and opens a dialog', () => {
+  assert.equal(dashboardShellSource.includes("open-change-password"), true)
+  assert.equal(dashboardShellSource.includes('>Change password</button>'), true)
+  assert.equal(accountFormSource.includes("addEventListener('open-change-password'"), true)
+  assert.equal(accountFormSource.includes('<dialog'), true)
+  assert.equal(accountFormSource.includes('profile-password-section'), false)
+  assert.equal(accountPageSource.includes("openPasswordDialog={recovery === '1'}"), true)
+})
+
 test('confirm route accepts token hash and PKCE code links and never redirects off the profile page', () => {
   assert.equal(confirmRouteSource.includes('verifyOtp({ type, token_hash })'), true)
   assert.equal(confirmRouteSource.includes('exchangeCodeForSession(code)'), true)

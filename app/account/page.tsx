@@ -15,7 +15,7 @@ export default async function Account({ searchParams }: { searchParams: Promise<
   return <>
     <DashboardShell email={user?.email || ''} name={user?.user_metadata?.full_name || ''} environment={process.env.VERCEL_ENV || 'Local'}>
       {recovery === '1' && <div className="account-banner" role="status">Password reset confirmed. Choose a new password below.</div>}
-      <AccountForm claims={claimsData.claims} />
+      <AccountForm claims={claimsData.claims} openPasswordDialog={recovery === '1'} />
     </DashboardShell>
     <ChangeRequestPanel />
     <ReleaseUpdater initialVersion={process.env.VERCEL_GIT_COMMIT_SHA || 'local'} />

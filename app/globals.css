@@ -153,9 +153,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .dashboard-section-heading h2 { font-size: 15px; margin: 0 0 7px; font-weight: 500; }.dashboard-section-heading p { font-size: 12px; color: var(--ui-muted); margin: 0; }.dashboard-section-heading>span { color: var(--ui-muted); font-size: 10px; letter-spacing: .1em; }
 .dashboard-profile-card .form-widget { max-width: 680px; margin: 0; padding: 28px; }
 .account-banner { margin: 0 0 20px; padding: 12px 16px; border: 1px solid var(--ui-tint-border); border-radius: 6px; background: var(--ui-tint); color: var(--ui-text); }
-.profile-password-section { display: grid; gap: 12px; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--ui-border); }
-.profile-password-copy h2 { font-size: 18px; font-weight: 500; margin: 0 0 4px; }
-.profile-password-copy p { margin: 0; color: var(--ui-muted); font-size: 13px; }
+.password-dialog { display: none; gap: 12px; }
+.password-dialog[open] { display: grid; }
+.password-dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.password-ok { color: var(--ui-text); font-weight: 500; }
+.password-error { color: #b42318; }
 .dashboard-mobile-toggle, .dashboard-hidden-trigger, .dashboard-backdrop { display: none; }
 
 /* Request drawer, estimates, uploads, and release notifications. */
