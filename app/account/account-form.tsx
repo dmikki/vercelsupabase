@@ -16,6 +16,9 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
   const [mobilePhone, setMobilePhone] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
   const [avatar_url, setAvatarUrl] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
 
   useEffect(() => {
     if (!userId) return
@@ -84,8 +87,34 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
     }
   }
 
+  async function updatePassword() {
+    if (!newPassword || !confirmPassword) {
+      alert('Enter and confirm your new password before saving.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      alert('Passwords do not match.')
+      return
+    }
+
+    try {
+      setPasswordLoading(true)
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+
+      setNewPassword('')
+      setConfirmPassword('')
+      alert('Password updated!')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      alert(message || 'Error updating the password!')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
   return (
-    <div className="form-widget" data-unsaved={dirty || loading}>
+    <div className="form-widget" data-unsaved={dirty || loading || passwordLoading}>
       <Avatar
         uid={claims?.sub ?? null}
         url={avatar_url}
@@ -148,6 +177,41 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         />
       </div>
 
+      <section className="profile-password-section" aria-labelledby="change-password-heading">
+        <div className="profile-password-copy">
+          <h2 id="change-password-heading">Change password</h2>
+          <p>Update the password on this account without leaving your profile.</p>
+        </div>
+        <div>
+          <label htmlFor="newPassword">New password</label>
+          <input
+            id="newPassword"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="confirmPassword">Confirm new password</label>
+          <input
+            id="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </div>
+        <button
+          className="button primary block"
+          type="button"
+          onClick={updatePassword}
+          disabled={passwordLoading || loading || !newPassword || !confirmPassword}
+        >
+          {passwordLoading ? 'Updating ...' : 'Change password'}
+        </button>
+      </section>
+
       <div>
         <button
           className="button primary block"
@@ -160,4 +224,3 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
     </div>
   )
 }
-

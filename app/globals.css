@@ -61,6 +61,8 @@ button, .button { display: inline-flex; justify-content: center; align-items: ce
 button:hover, .button:hover { background: var(--ui-hover); text-decoration: none; }
 button.primary, .button.primary, .dashboard-request-button { background: var(--ui-brand); border-color: var(--ui-brand); color: var(--ui-on-brand); }
 button.primary:hover, .button.primary:hover, .dashboard-request-button:hover { background: var(--ui-brand-hover); border-color: var(--ui-brand-hover); }
+button.link, .button.link { background: transparent; border-color: transparent; color: var(--ui-brand); justify-content: flex-start; padding: 0; min-height: auto; }
+button.link:hover, .button.link:hover { background: transparent; text-decoration: underline; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 :where(button, a, input, textarea, select, summary):focus-visible { outline: 2px solid var(--ui-brand); outline-offset: 3px; }
 .block { display: flex; width: 100%; }
@@ -99,6 +101,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .login-form label { margin: 10px 0 0; }.login-form input { font-size: 14px; }
 .login-actions { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 24px; }
 .login-actions button { width: 100%; min-height: 40px; }
+.login-reset-button { margin-top: 16px; }
+.login-reset-note { color: var(--ui-muted); font-size: 12px; margin: 8px 0 0; }
 .login-card [role=alert] { color: var(--ui-error); padding: 12px; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 6px; }
 .signup-status { padding: 16px; border: 1px solid var(--ui-tint-border); border-radius: 6px; background: var(--ui-tint); margin-bottom: 20px; }
 .signup-status strong { color: var(--ui-brand); }.signup-status p { margin-bottom: 0; }
@@ -148,6 +152,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .dashboard-section-heading { padding: 22px 28px; border-bottom: 1px solid var(--ui-border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .dashboard-section-heading h2 { font-size: 15px; margin: 0 0 7px; font-weight: 500; }.dashboard-section-heading p { font-size: 12px; color: var(--ui-muted); margin: 0; }.dashboard-section-heading>span { color: var(--ui-muted); font-size: 10px; letter-spacing: .1em; }
 .dashboard-profile-card .form-widget { max-width: 680px; margin: 0; padding: 28px; }
+.account-banner { margin: 0 0 20px; padding: 12px 16px; border: 1px solid var(--ui-tint-border); border-radius: 6px; background: var(--ui-tint); color: var(--ui-text); }
+.profile-password-section { display: grid; gap: 12px; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--ui-border); }
+.profile-password-copy h2 { font-size: 18px; font-weight: 500; margin: 0 0 4px; }
+.profile-password-copy p { margin: 0; color: var(--ui-muted); font-size: 13px; }
 .dashboard-mobile-toggle, .dashboard-hidden-trigger, .dashboard-backdrop { display: none; }
 
 /* Request drawer, estimates, uploads, and release notifications. */
