@@ -7,6 +7,13 @@ test('cost includes cached input once and rejects invalid usage',()=>{
  assert.equal(tokenCost(1000000,1000000,0),0.075)
  assert.throws(()=>tokenCost(10,11,0));assert.throws(()=>tokenCost(-1,0,0))
 })
+test('requests that need protected auth or server files are manual-only',()=>{
+ const issue32=estimateChange('Password options','add change password option under profile and also forgot password option in the signup/login screen')
+ assert.equal(issue32.manualOnly,true)
+ assert.equal(estimateChange('Session timeout','Sign users out after inactivity').manualOnly,true)
+ assert.equal(estimateChange('Welcome heading','Add a welcome heading to the account page.').manualOnly,false)
+ assert.equal(estimateChange('Login colors','Make the login page background blue.').manualOnly,false)
+})
 test('only explicit admin acceptance authorizes eligible work',()=>{
  const small=estimateChange('Welcome heading','Add a welcome heading to the account page.')
  assert.equal(mayAutoApprove(true,false,small),false)

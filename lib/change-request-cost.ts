@@ -8,7 +8,8 @@ export function tokenCost(input: number, cached: number, output: number) {
 }
 export function estimateChange(title: string, description: string, attachmentReserve=0) {
   const text = `${title} ${description}`
-  const complex = /payment|authentication|oauth|dependency|infrastructure/i.test(text)
+  // Anything touching sign-in, passwords, sessions, email links, server actions or secrets needs protected files, which automation can never publish.
+  const complex = /payment|authenticat|\bauth\b|oauth|password|passcode|forgot|magic.?link|\bsso\b|\bmfa\b|\b2fa\b|two.?factor|session|server action|api route|route handler|middleware|webhook|cookie|api key|secret|environment variable|dependency|infrastructure/i.test(text)
   // Additive schema changes are automated: tested locally, on staging, then applied to production after approval.
   const database = !complex && /database|schema|migration|table|column/i.test(text)
   const medium = database || text.length > 800 || /integration|multiple|dashboard|upload|search|filter|menu/i.test(text)

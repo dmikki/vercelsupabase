@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Avatar from './avatar'
 
 type Claims = { sub: string; email?: string; [key: string]: unknown }
 
-export default function AccountForm({ claims }: { claims: Claims | null }) {
+export default function AccountForm({ claims, openPasswordDialog = false }: { claims: Claims | null; openPasswordDialog?: boolean }) {
   const [supabase] = useState(() => createClient())
   const [dirty, setDirty] = useState(false)
   const userId = claims?.sub
@@ -16,6 +16,19 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
   const [mobilePhone, setMobilePhone] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
   const [avatar_url, setAvatarUrl] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [passwordMessage, setPasswordMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const passwordDialog = useRef<HTMLDialogElement>(null)
+
+  // The avatar menu opens this dialog; a password-reset link opens it automatically.
+  useEffect(() => {
+    const open = () => { setPasswordMessage(null); if (!passwordDialog.current?.open) passwordDialog.current?.showModal() }
+    window.addEventListener('open-change-password', open)
+    if (openPasswordDialog) open()
+    return () => window.removeEventListener('open-change-password', open)
+  }, [openPasswordDialog])
 
   useEffect(() => {
     if (!userId) return
@@ -84,6 +97,32 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
     }
   }
 
+  async function updatePassword() {
+    if (!newPassword || !confirmPassword) {
+      setPasswordMessage({ text: 'Enter and confirm your new password before saving.', ok: false })
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage({ text: 'Passwords do not match.', ok: false })
+      return
+    }
+
+    try {
+      setPasswordLoading(true)
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordMessage({ text: 'Password updated!', ok: true })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      setPasswordMessage({ text: message || 'Error updating the password!', ok: false })
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
   return (
     <div className="form-widget" data-unsaved={dirty || loading}>
       <Avatar
@@ -148,6 +187,45 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
         />
       </div>
 
+      <dialog
+        ref={passwordDialog}
+        className="signup-dialog password-dialog"
+        aria-labelledby="change-password-heading"
+        onClose={() => { setNewPassword(''); setConfirmPassword(''); setPasswordMessage(null) }}
+      >
+        <h2 id="change-password-heading">Change password</h2>
+        <p>Choose a new password for this account.</p>
+        <div>
+          <label htmlFor="newPassword">New password</label>
+          <input
+            id="newPassword"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="confirmPassword">Confirm new password</label>
+          <input
+            id="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </div>
+        {passwordMessage && <p role={passwordMessage.ok ? 'status' : 'alert'} className={passwordMessage.ok ? 'password-ok' : 'password-error'}>{passwordMessage.text}</p>}
+        <div className="password-dialog-actions">
+          <button className="button primary" type="button" onClick={updatePassword} disabled={passwordLoading || !newPassword || !confirmPassword}>
+            {passwordLoading ? 'Updating ...' : 'Change password'}
+          </button>
+          <button className="button" type="button" onClick={() => passwordDialog.current?.close()}>
+            {passwordMessage?.ok ? 'Done' : 'Cancel'}
+          </button>
+        </div>
+      </dialog>
+
       <div>
         <button
           className="button primary block"
@@ -160,4 +238,3 @@ export default function AccountForm({ claims }: { claims: Claims | null }) {
     </div>
   )
 }
-

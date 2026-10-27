@@ -6,26 +6,31 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const token_hash = searchParams.get('token_hash')
+  const code = searchParams.get('code')
   const type = searchParams.get('type') as EmailOtpType | null
+  // Only the profile page is a valid landing page, so a crafted link can never redirect elsewhere.
   const next = '/account'
+  const recovery = type === 'recovery' || searchParams.get('recovery') === '1'
 
-  // Create redirect link without the secret token
+  // Create redirect link without the secret token or code
   const redirectTo = request.nextUrl.clone()
   redirectTo.pathname = next
-  redirectTo.searchParams.delete('token_hash')
-  redirectTo.searchParams.delete('type')
+  for (const name of ['token_hash', 'code', 'type', 'next', 'recovery']) redirectTo.searchParams.delete(name)
+
+  const supabase = await createClient()
+  let error: unknown = new Error('Missing confirmation parameters')
 
   if (token_hash && type) {
-    const supabase = await createClient()
+    // Email link carrying a token hash (custom email templates).
+    error = (await supabase.auth.verifyOtp({ type, token_hash })).error
+  } else if (code) {
+    // Default Supabase email links return a PKCE code to the redirect URL.
+    error = (await supabase.auth.exchangeCodeForSession(code)).error
+  }
 
-    const { error } = await supabase.auth.verifyOtp({
-      type,
-      token_hash,
-    })
-    if (!error) {
-      redirectTo.searchParams.delete('next')
-      return NextResponse.redirect(redirectTo)
-    }
+  if (!error) {
+    if (recovery) redirectTo.searchParams.set('recovery', '1')
+    return NextResponse.redirect(redirectTo)
   }
 
   // return the user to an error page with some instructions
